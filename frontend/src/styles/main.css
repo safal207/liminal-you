@@ -16,3 +16,22 @@ body {
 a {
   color: var(--color-accent);
 }
+
+.resonance-flash {
+  animation: resonance-flash 1.8s ease-out;
+}
+
+@keyframes resonance-flash {
+  0% {
+    background-color: transparent;
+    box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+  }
+  40% {
+    background-color: var(--pulse-color, rgba(111, 255, 233, 0.18));
+    box-shadow: 0 0 45px var(--pulse-color, rgba(111, 255, 233, 0.35));
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+  }
+}
