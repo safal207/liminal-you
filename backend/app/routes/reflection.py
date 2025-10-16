@@ -5,12 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from ..models.reflection import Reflection, ReflectionCreate
 from ..services import storage
 from ..services.auth import get_current_user_optional
+from ..resonance import resonance_hub
 
 router = APIRouter()
 
 
 @router.post("/reflection", response_model=Reflection, status_code=status.HTTP_201_CREATED)
-def create_reflection(
+async def create_reflection(
     payload: ReflectionCreate,
     user: str | None = Depends(get_current_user_optional),
 ) -> Reflection:
@@ -18,7 +19,13 @@ def create_reflection(
     if payload.message.strip() == "":
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    return storage.add_reflection(payload, author=user or payload.from_node)
+    reflection = storage.add_reflection(payload, author=user or payload.from_node)
+
+    await resonance_hub.publish(
+        {"event": "new_reflection", "data": reflection.model_dump()}
+    )
+
+    return reflection
 
 
 @router.get("/reflection", response_model=List[Reflection])

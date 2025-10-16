@@ -6,6 +6,7 @@ interface Props {
   reflections: Reflection[];
   loading: boolean;
   onSubmit: (payload: ReflectionPayload) => Promise<void>;
+  highlightedIds: string[];
 }
 
 const defaultForm: ReflectionPayload = {
@@ -15,7 +16,7 @@ const defaultForm: ReflectionPayload = {
   emotion: 'свет'
 };
 
-export default function Feed({ reflections, loading, onSubmit }: Props) {
+export default function Feed({ reflections, loading, onSubmit, highlightedIds }: Props) {
   const [form, setForm] = useState<ReflectionPayload>(defaultForm);
   const [sending, setSending] = useState(false);
 
@@ -65,7 +66,13 @@ export default function Feed({ reflections, loading, onSubmit }: Props) {
         ) : reflections.length === 0 ? (
           <p className="text-text/70">Пока тихо. Оставь первое отражение.</p>
         ) : (
-          reflections.map((reflection) => <ReflectionCard key={reflection.id} reflection={reflection} />)
+          reflections.map((reflection) => (
+            <ReflectionCard
+              key={reflection.id}
+              reflection={reflection}
+              highlighted={highlightedIds.includes(reflection.id)}
+            />
+          ))
         )}
       </div>
     </div>
