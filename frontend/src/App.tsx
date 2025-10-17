@@ -4,6 +4,7 @@ import ProfileView from './components/ProfileView';
 import { createReflection, fetchFeed, fetchProfile } from './api/client';
 import { useResonanceSocket } from './api/useResonanceSocket';
 import { ReflectionPayload, Reflection } from './types';
+import { useAstroField, AstroFieldState } from './api/useAstroField';
 
 const DEFAULT_PROFILE_ID = 'user-001';
 const HIGHLIGHT_DURATION = 2400;
@@ -14,8 +15,12 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
+  const [fieldState, setFieldState] = useState<AstroFieldState | null>(null);
+  const [overload, setOverload] = useState(false);
+  const [submissionsRate, setSubmissionsRate] = useState(0);
   const highlightTimers = useRef<Record<string, number>>({});
   const audioContextRef = useRef<AudioContext | null>(null);
+  const astroLastSample = useRef<{ ts: number; samples: number } | null>(null);
 
   const ensureAudioContext = useCallback(async (): Promise<AudioContext | null> => {
     if (typeof window === 'undefined') {
@@ -177,6 +182,14 @@ function App() {
               author: payload.author,
               content: payload.content,
               emotion: payload.emotion,
+              pad:
+                Array.isArray(payload.pad) && payload.pad.length === 3
+                  ? [
+                      Number(payload.pad[0] ?? 0),
+                      Number(payload.pad[1] ?? 0),
+                      Number(payload.pad[2] ?? 0)
+                    ]
+                  : undefined,
             }
           : null;
 
@@ -198,13 +211,55 @@ function App() {
     [playResonance, registerHighlight]
   );
 
+  const handleFieldUpdate = useCallback((state: AstroFieldState) => {
+    setFieldState(state);
+
+    const previous = astroLastSample.current;
+    let rate = 0;
+    if (previous && state.ts > previous.ts && state.samples >= previous.samples) {
+      const deltaSamples = state.samples - previous.samples;
+      const deltaSeconds = Math.max(1, state.ts - previous.ts);
+      rate = (deltaSamples / deltaSeconds) * 60;
+    }
+
+    astroLastSample.current = { ts: state.ts, samples: state.samples };
+    setSubmissionsRate(rate);
+
+    const overloadThreshold = 6;
+    setOverload(state.entropy > 0.7 && rate > overloadThreshold);
+  }, []);
+
+  useAstroField(handleFieldUpdate);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const docEl = document.documentElement;
+    const [pleasure, arousal] = fieldState?.pad_avg ?? [0.55, 0.35];
+    const coherence = fieldState?.coherence ?? 0.5;
+    const breath = Math.round(3200 - Math.min(Math.max(arousal, 0), 1) * 1600);
+    const hue = Math.round(Math.min(Math.max(pleasure, 0), 1) * 120);
+
+    docEl.style.setProperty('--liminal-breath', `${breath}ms`);
+    docEl.style.setProperty('--liminal-hue', `${hue}`);
+    docEl.style.setProperty('--liminal-intensity', coherence.toFixed(2));
+
+    return () => {
+      docEl.style.setProperty('--liminal-breath', '2800ms');
+      docEl.style.setProperty('--liminal-hue', '90');
+      docEl.style.setProperty('--liminal-intensity', '0.5');
+    };
+  }, [fieldState]);
+
   useResonanceSocket(handleResonanceMessage);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-bg text-text font-sans">
+    <div className="relative min-h-screen overflow-hidden bg-field text-text font-sans body-breath">
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute left-1/2 top-[-15%] h-[80%] w-[120%] -translate-x-1/2 rounded-full bg-gradient-to-b from-accent/20 via-accent/10 to-transparent blur-3xl opacity-60 animate-breath" />
-        <div className="absolute inset-x-0 bottom-[-30%] h-1/2 bg-gradient-to-t from-accent/10 via-transparent to-transparent blur-3xl animate-breath" />
+        <div className="astro-breath absolute left-1/2 top-[-15%] h-[80%] w-[120%] -translate-x-1/2 rounded-full bg-gradient-to-b from-accent/30 via-accent/10 to-transparent blur-3xl opacity-70" />
+        <div className="astro-breath absolute inset-x-0 bottom-[-30%] h-1/2 bg-gradient-to-t from-accent/10 via-transparent to-transparent blur-3xl" />
       </div>
       <header className="border-b border-accent/40 p-6 flex justify-between items-center">
         <h1 className="text-2xl font-semibold tracking-wide text-accent">Liminal-You</h1>
@@ -215,6 +270,11 @@ function App() {
           {profileOpen ? 'Закрыть профиль' : 'Профиль'}
         </button>
       </header>
+      {overload && (
+        <div className="mx-6 mt-4 rounded-xl border border-yellow-400/60 bg-yellow-400/10 p-4 text-sm text-yellow-100">
+          Поле дрожит (энтропия {fieldState?.entropy.toFixed(2)}). Темп {submissionsRate.toFixed(1)} отраж./мин — сделаем вдох и замедлимся.
+        </div>
+      )}
       {error && <div className="bg-red-500/20 border border-red-500/40 text-red-200 p-4 m-6 rounded">{error}</div>}
       <main className="grid gap-8 p-6 md:grid-cols-[2fr_1fr]">
         <section>

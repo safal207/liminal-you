@@ -5,6 +5,7 @@ from .routes.feed import router as feed_router
 from .routes.reflection import router as reflection_router
 from .routes.resonance import router as resonance_router
 from .routes.profile import router as profile_router
+from .routes.astro import router as astro_router
 
 
 def create_app() -> FastAPI:
@@ -22,6 +23,7 @@ def create_app() -> FastAPI:
     app.include_router(reflection_router, prefix="/api", tags=["reflections"])
     app.include_router(profile_router, prefix="/api", tags=["profiles"])
     app.include_router(resonance_router, tags=["resonance"])
+    app.include_router(astro_router, tags=["astro"])
 
     return app
 

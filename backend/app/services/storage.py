@@ -20,6 +20,7 @@ def add_reflection(payload: ReflectionCreate, author: str | None = None) -> Refl
         author=author or payload.from_node,
         content=payload.message,
         emotion=payload.emotion,
+        pad=payload.pad,
     )
     _REFLECTIONS.append(new_reflection)
     return new_reflection

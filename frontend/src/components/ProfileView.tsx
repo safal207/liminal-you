@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchProfile } from '../api/client';
+import { fetchProfile, updateAstroPreference } from '../api/client';
 import { Profile } from '../types';
 
 interface Props {
@@ -9,6 +9,7 @@ interface Props {
 export default function ProfileView({ profileId }: Props) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -30,6 +31,18 @@ export default function ProfileView({ profileId }: Props) {
   if (!profile) {
     return <div className="rounded-xl border border-accent/30 bg-white/5 p-6 text-text/70">Загрузка профиля...</div>;
   }
+
+  const toggleAstroPreference = async () => {
+    setUpdating(true);
+    try {
+      const updated = await updateAstroPreference(profile.id, !profile.astro_opt_out);
+      setProfile(updated);
+    } catch (err) {
+      setError('Не удалось обновить настройку AstroLayer.');
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   return (
     <div className="space-y-4 rounded-xl border border-accent/30 bg-white/5 p-6">
@@ -59,6 +72,25 @@ export default function ProfileView({ profileId }: Props) {
         </ul>
       </div>
       <div className="text-sm text-text/70">Отражений: {profile.reflections_count}</div>
+      <div className="flex items-center justify-between rounded-lg border border-accent/30 bg-black/20 p-3 text-sm">
+        <div>
+          <div className="font-medium text-accent">AstroLayer</div>
+          <p className="text-text/60">Не вплетать мои эмоции в общее поле</p>
+        </div>
+        <button
+          onClick={toggleAstroPreference}
+          disabled={updating}
+          className={`relative inline-flex h-7 w-12 items-center rounded-full border transition ${
+            profile.astro_opt_out ? 'border-accent bg-accent/40' : 'border-accent/50 bg-black/40'
+          } ${updating ? 'opacity-60' : 'hover:border-accent'}`}
+        >
+          <span
+            className={`inline-block h-5 w-5 transform rounded-full bg-accent transition ${
+              profile.astro_opt_out ? 'translate-x-5' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
     </div>
   );
 }
