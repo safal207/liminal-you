@@ -3,6 +3,7 @@ export type Reflection = {
   author: string;
   content: string;
   emotion: string;
+  pad?: [number, number, number];
 };
 
 export type ReflectionPayload = {
@@ -10,6 +11,7 @@ export type ReflectionPayload = {
   to_user: string;
   message: string;
   emotion: string;
+  pad?: [number, number, number];
 };
 
 export type Profile = {
@@ -19,4 +21,5 @@ export type Profile = {
   nodes: { id: string; label: string }[];
   reflections_count: number;
   emotions: Record<string, number>;
+  astro_opt_out: boolean;
 };

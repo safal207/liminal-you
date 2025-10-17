@@ -6,15 +6,44 @@
   --color-bg: #0d0d11;
   --color-accent: #6fffe9;
   --color-text: #eaeaea;
+  --liminal-breath: 2800ms;
+  --liminal-hue: 90;
+  --liminal-intensity: 0.5;
 }
 
 body {
-  background-color: var(--color-bg);
+  background-color: hsl(var(--liminal-hue), 65%, calc(6% + var(--liminal-intensity) * 6%));
   color: var(--color-text);
+  transition: background-color 0.8s ease;
+}
+
+.bg-field {
+  background-color: hsl(var(--liminal-hue), 65%, calc(6% + var(--liminal-intensity) * 6%));
+  transition: background-color 0.8s ease;
+}
+
+.body-breath {
+  animation: breathe var(--liminal-breath) ease-in-out infinite;
+}
+
+.astro-breath {
+  animation: breathe var(--liminal-breath) ease-in-out infinite;
 }
 
 a {
   color: var(--color-accent);
+}
+
+@keyframes breathe {
+  0% {
+    opacity: 0.94;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.94;
+  }
 }
 
 .resonance-flash {

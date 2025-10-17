@@ -15,6 +15,7 @@ class Profile(BaseModel):
     nodes: List[Dict[str, str]]
     reflections_count: int
     emotions: Dict[str, int]
+    astro_opt_out: bool = False
 
     class Config:
         json_schema_extra = {
@@ -25,6 +26,7 @@ class Profile(BaseModel):
                 "nodes": [{"id": "node-1", "label": "Созерцание"}],
                 "reflections_count": 3,
                 "emotions": {"радость": 5, "свет": 3},
+                "astro_opt_out": False,
             }
         }
 
