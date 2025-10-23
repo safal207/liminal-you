@@ -3,7 +3,12 @@ from pydantic import BaseModel
 
 from ..models.profile import Profile
 from ..services.auth import get_current_user_optional
-from ..services.preferences import get_astro_opt_out, set_astro_opt_out
+from ..services.preferences import (
+    get_astro_opt_out,
+    get_feedback_enabled,
+    set_astro_opt_out,
+    set_feedback_enabled,
+)
 
 router = APIRouter()
 
@@ -30,7 +35,17 @@ class AstroOptPayload(BaseModel):
 
 
 def _build_profile(profile_id: str) -> Profile:
-    return Profile(**{**_SAMPLE_PROFILE_DATA, "astro_opt_out": get_astro_opt_out(profile_id)})
+    return Profile(
+        **{
+            **_SAMPLE_PROFILE_DATA,
+            "astro_opt_out": get_astro_opt_out(profile_id),
+            "feedback_enabled": get_feedback_enabled(profile_id),
+        }
+    )
+
+
+class ProfileSettingsPayload(BaseModel):
+    feedback_enabled: bool
 
 
 @router.get("/profile/{profile_id}", response_model=Profile)
@@ -58,4 +73,23 @@ def set_profile_astro_opt_out(
         raise HTTPException(status_code=404, detail="Profile not found")
 
     set_astro_opt_out(profile_id, payload.astro_opt_out)
+    return _build_profile(profile_id)
+
+
+@router.patch("/profile/{profile_id}/settings", response_model=Profile)
+def update_profile_settings(
+    profile_id: str,
+    payload: ProfileSettingsPayload,
+    user: str | None = Depends(get_current_user_optional),
+) -> Profile:
+    if user and user != profile_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Измени настройки в своём профиле",
+        )
+
+    if profile_id != _SAMPLE_PROFILE_DATA["id"]:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    set_feedback_enabled(profile_id, payload.feedback_enabled)
     return _build_profile(profile_id)

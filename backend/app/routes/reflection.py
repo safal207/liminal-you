@@ -6,10 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from ..models.reflection import Reflection, ReflectionCreate
 from ..services import storage
 from ..services.auth import get_current_user_optional
-from ..resonance import resonance_hub
+from ..feedback import feedback_hub
 from ..services.preferences import get_astro_opt_out
 from ..astro import map_label_to_pad
-from .astro import field, push_field
 
 router = APIRouter()
 
@@ -28,9 +27,7 @@ async def create_reflection(
 
     reflection = storage.add_reflection(payload, author=user or payload.from_node)
 
-    await resonance_hub.publish(
-        {"event": "new_reflection", "data": reflection.model_dump()}
-    )
+    await feedback_hub.publish({"event": "new_reflection", "data": reflection.model_dump()})
 
     author = reflection.author
     now = time.time()
@@ -39,8 +36,7 @@ async def create_reflection(
 
     if not rate_limited and not opted_out:
         pad_vec = payload.pad or map_label_to_pad(payload.emotion)
-        state = field.integrate(pad_vec)
-        await push_field(state)
+        await feedback_hub.integrate_field(pad_vec)
         _LAST_INTEGRATION[author] = now
 
     return reflection

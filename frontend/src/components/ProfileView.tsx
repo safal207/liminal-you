@@ -1,28 +1,50 @@
 import { useEffect, useState } from 'react';
-import { fetchProfile, updateAstroPreference } from '../api/client';
+import { fetchProfile, updateAstroPreference, updateFeedbackPreference } from '../api/client';
 import { Profile } from '../types';
 
 interface Props {
   profileId: string;
+  initialProfile?: Profile | null;
+  onProfileUpdate?: (profile: Profile) => void;
 }
 
-export default function ProfileView({ profileId }: Props) {
-  const [profile, setProfile] = useState<Profile | null>(null);
+export default function ProfileView({ profileId, initialProfile = null, onProfileUpdate }: Props) {
+  const [profile, setProfile] = useState<Profile | null>(initialProfile);
   const [error, setError] = useState<string | null>(null);
-  const [updating, setUpdating] = useState(false);
+  const [updatingAstro, setUpdatingAstro] = useState(false);
+  const [updatingFeedback, setUpdatingFeedback] = useState(false);
 
   useEffect(() => {
+    setProfile(initialProfile);
+  }, [initialProfile]);
+
+  useEffect(() => {
+    if (initialProfile) {
+      return;
+    }
+
+    let cancelled = false;
+
     async function load() {
       try {
         const data = await fetchProfile(profileId);
-        setProfile(data);
+        if (!cancelled) {
+          setProfile(data);
+          onProfileUpdate?.(data);
+        }
       } catch (err) {
-        setError('Профиль недоступен.');
+        if (!cancelled) {
+          setError('Профиль недоступен.');
+        }
       }
     }
 
     load();
-  }, [profileId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialProfile, onProfileUpdate, profileId]);
 
   if (error) {
     return <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-6 text-red-100">{error}</div>;
@@ -33,14 +55,28 @@ export default function ProfileView({ profileId }: Props) {
   }
 
   const toggleAstroPreference = async () => {
-    setUpdating(true);
+    setUpdatingAstro(true);
     try {
       const updated = await updateAstroPreference(profile.id, !profile.astro_opt_out);
       setProfile(updated);
+      onProfileUpdate?.(updated);
     } catch (err) {
       setError('Не удалось обновить настройку AstroLayer.');
     } finally {
-      setUpdating(false);
+      setUpdatingAstro(false);
+    }
+  };
+
+  const toggleFeedbackPreference = async () => {
+    setUpdatingFeedback(true);
+    try {
+      const updated = await updateFeedbackPreference(profile.id, !profile.feedback_enabled);
+      setProfile(updated);
+      onProfileUpdate?.(updated);
+    } catch (err) {
+      setError('Не удалось обновить контур обратной связи.');
+    } finally {
+      setUpdatingFeedback(false);
     }
   };
 
@@ -79,14 +115,33 @@ export default function ProfileView({ profileId }: Props) {
         </div>
         <button
           onClick={toggleAstroPreference}
-          disabled={updating}
+          disabled={updatingAstro}
           className={`relative inline-flex h-7 w-12 items-center rounded-full border transition ${
             profile.astro_opt_out ? 'border-accent bg-accent/40' : 'border-accent/50 bg-black/40'
-          } ${updating ? 'opacity-60' : 'hover:border-accent'}`}
+          } ${updatingAstro ? 'opacity-60' : 'hover:border-accent'}`}
         >
           <span
             className={`inline-block h-5 w-5 transform rounded-full bg-accent transition ${
               profile.astro_opt_out ? 'translate-x-5' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
+      <div className="flex items-center justify-between rounded-lg border border-accent/30 bg-black/20 p-3 text-sm">
+        <div>
+          <div className="font-medium text-accent">Feedback Aura</div>
+          <p className="text-text/60">Нежные подсказки из общего поля</p>
+        </div>
+        <button
+          onClick={toggleFeedbackPreference}
+          disabled={updatingFeedback}
+          className={`relative inline-flex h-7 w-12 items-center rounded-full border transition ${
+            profile.feedback_enabled ? 'border-accent bg-accent/40' : 'border-accent/50 bg-black/40'
+          } ${updatingFeedback ? 'opacity-60' : 'hover:border-accent'}`}
+        >
+          <span
+            className={`inline-block h-5 w-5 transform rounded-full bg-accent transition ${
+              profile.feedback_enabled ? 'translate-x-5' : 'translate-x-1'
             }`}
           />
         </button>

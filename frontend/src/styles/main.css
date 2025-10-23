@@ -9,6 +9,9 @@
   --liminal-breath: 2800ms;
   --liminal-hue: 90;
   --liminal-intensity: 0.5;
+  --feedback-breath: 2800ms;
+  --feedback-hue: 90;
+  --feedback-intensity: 0.5;
 }
 
 body {
