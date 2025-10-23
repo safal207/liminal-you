@@ -22,4 +22,5 @@ export type Profile = {
   reflections_count: number;
   emotions: Record<string, number>;
   astro_opt_out: boolean;
+  feedback_enabled: boolean;
 };

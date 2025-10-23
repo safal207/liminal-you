@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Feed from './components/Feed';
 import ProfileView from './components/ProfileView';
+import FeedbackAura from './components/FeedbackAura';
 import { createReflection, fetchFeed, fetchProfile } from './api/client';
-import { useResonanceSocket } from './api/useResonanceSocket';
-import { ReflectionPayload, Reflection } from './types';
-import { useAstroField, AstroFieldState } from './api/useAstroField';
+import { ReflectionPayload, Reflection, Profile } from './types';
+import { useNeuroFeedback } from './hooks/useNeuroFeedback';
+import { useAstroField, AstroFieldState } from './hooks/useAstroField';
 
 const DEFAULT_PROFILE_ID = 'user-001';
 const HIGHLIGHT_DURATION = 2400;
@@ -18,39 +19,10 @@ function App() {
   const [fieldState, setFieldState] = useState<AstroFieldState | null>(null);
   const [overload, setOverload] = useState(false);
   const [submissionsRate, setSubmissionsRate] = useState(0);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [feedbackEnabled, setFeedbackEnabled] = useState(true);
   const highlightTimers = useRef<Record<string, number>>({});
-  const audioContextRef = useRef<AudioContext | null>(null);
   const astroLastSample = useRef<{ ts: number; samples: number } | null>(null);
-
-  const ensureAudioContext = useCallback(async (): Promise<AudioContext | null> => {
-    if (typeof window === 'undefined') {
-      return null;
-    }
-
-    const globalWindow = window as Window & { webkitAudioContext?: typeof AudioContext };
-    const AudioContextCtor = window.AudioContext ?? globalWindow.webkitAudioContext;
-
-    if (!AudioContextCtor) {
-      return null;
-    }
-
-    let context = audioContextRef.current;
-
-    if (!context || context.state === 'closed') {
-      context = new AudioContextCtor();
-      audioContextRef.current = context;
-    }
-
-    if (context.state === 'suspended') {
-      try {
-        await context.resume();
-      } catch (error) {
-        return null;
-      }
-    }
-
-    return context;
-  }, []);
 
   useEffect(() => {
     async function load() {
@@ -68,68 +40,28 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
+    let cancelled = false;
+
+    async function loadProfile() {
+      try {
+        const data = await fetchProfile(DEFAULT_PROFILE_ID);
+        if (!cancelled) {
+          setProfile(data);
+          setFeedbackEnabled(data.feedback_enabled);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setFeedbackEnabled(true);
+        }
+      }
     }
 
-    const handleUserGesture = () => {
-      void ensureAudioContext();
-    };
-
-    window.addEventListener('pointerdown', handleUserGesture, { once: true });
+    loadProfile();
 
     return () => {
-      window.removeEventListener('pointerdown', handleUserGesture);
-    };
-  }, [ensureAudioContext]);
-
-  useEffect(() => {
-    return () => {
-      Object.values(highlightTimers.current).forEach((timer) => window.clearTimeout(timer));
-      highlightTimers.current = {};
-
-      const context = audioContextRef.current;
-      audioContextRef.current = null;
-
-      if (context && context.state !== 'closed') {
-        void context.close().catch(() => {});
-      }
+      cancelled = true;
     };
   }, []);
-
-  const playResonance = useCallback(() => {
-    ensureAudioContext()
-      .then((context) => {
-        if (!context) {
-          return;
-        }
-
-        const oscillator = context.createOscillator();
-        const gain = context.createGain();
-        const now = context.currentTime;
-
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(432, now);
-
-        gain.gain.setValueAtTime(0.0001, now);
-        gain.gain.exponentialRampToValueAtTime(0.02, now + 0.05);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
-
-        oscillator.connect(gain);
-        gain.connect(context.destination);
-
-        oscillator.onended = () => {
-          oscillator.disconnect();
-          gain.disconnect();
-        };
-
-        oscillator.start(now);
-        oscillator.stop(now + 0.6);
-      })
-      .catch(() => {
-        // Ignore playback failures silently to avoid interrupting the flow.
-      });
-  }, [ensureAudioContext]);
 
   const registerHighlight = useCallback((id: string) => {
     setHighlightedIds((prev) => (prev.includes(id) ? prev : [id, ...prev]));
@@ -154,61 +86,35 @@ function App() {
 
   const toggleProfile = async () => {
     if (!profileOpen) {
-      try {
-        await fetchProfile(DEFAULT_PROFILE_ID);
-        setProfileOpen(true);
-      } catch (err) {
-        setError('Профиль недоступен.');
+      if (!profile) {
+        try {
+          const data = await fetchProfile(DEFAULT_PROFILE_ID);
+          setProfile(data);
+          setFeedbackEnabled(data.feedback_enabled);
+        } catch (err) {
+          setError('Профиль недоступен.');
+          return;
+        }
       }
+      setProfileOpen(true);
     } else {
       setProfileOpen(false);
     }
   };
 
-  const handleResonanceMessage = useCallback(
-    (message: { event: string; data?: unknown }) => {
-      if (message.event !== 'new_reflection' || !message.data) {
-        return;
-      }
-
-      const payload = message.data as Record<string, unknown>;
-      const candidate: Reflection | null =
-        typeof payload.id === 'string' &&
-        typeof payload.author === 'string' &&
-        typeof payload.content === 'string' &&
-        typeof payload.emotion === 'string'
-          ? {
-              id: payload.id,
-              author: payload.author,
-              content: payload.content,
-              emotion: payload.emotion,
-              pad:
-                Array.isArray(payload.pad) && payload.pad.length === 3
-                  ? [
-                      Number(payload.pad[0] ?? 0),
-                      Number(payload.pad[1] ?? 0),
-                      Number(payload.pad[2] ?? 0)
-                    ]
-                  : undefined,
-            }
-          : null;
-
-      if (!candidate) {
-        return;
-      }
-
+  const handleReflectionEvent = useCallback(
+    (reflection: Reflection) => {
       setFeed((prev) => {
-        const exists = prev.some((item) => item.id === candidate.id);
+        const exists = prev.some((item) => item.id === reflection.id);
         if (exists) {
           return prev;
         }
-        return [candidate, ...prev];
+        return [reflection, ...prev];
       });
 
-      registerHighlight(candidate.id);
-      playResonance();
+      registerHighlight(reflection.id);
     },
-    [playResonance, registerHighlight]
+    [registerHighlight]
   );
 
   const handleFieldUpdate = useCallback((state: AstroFieldState) => {
@@ -229,7 +135,13 @@ function App() {
     setOverload(state.entropy > 0.7 && rate > overloadThreshold);
   }, []);
 
-  useAstroField(handleFieldUpdate);
+  const { frame: feedbackFrame } = useNeuroFeedback({
+    profileId: DEFAULT_PROFILE_ID,
+    enabled: feedbackEnabled,
+    onReflection: handleReflectionEvent
+  });
+
+  useAstroField(feedbackFrame, handleFieldUpdate);
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -237,26 +149,23 @@ function App() {
     }
 
     const docEl = document.documentElement;
-    const [pleasure, arousal] = fieldState?.pad_avg ?? [0.55, 0.35];
-    const coherence = fieldState?.coherence ?? 0.5;
-    const breath = Math.round(3200 - Math.min(Math.max(arousal, 0), 1) * 1600);
-    const hue = Math.round(Math.min(Math.max(pleasure, 0), 1) * 120);
-
-    docEl.style.setProperty('--liminal-breath', `${breath}ms`);
-    docEl.style.setProperty('--liminal-hue', `${hue}`);
-    docEl.style.setProperty('--liminal-intensity', coherence.toFixed(2));
+    docEl.style.setProperty('--liminal-intensity', (fieldState?.coherence ?? 0.5).toFixed(2));
 
     return () => {
-      docEl.style.setProperty('--liminal-breath', '2800ms');
-      docEl.style.setProperty('--liminal-hue', '90');
       docEl.style.setProperty('--liminal-intensity', '0.5');
     };
   }, [fieldState]);
 
-  useResonanceSocket(handleResonanceMessage);
+  useEffect(() => {
+    return () => {
+      Object.values(highlightTimers.current).forEach((timer) => window.clearTimeout(timer));
+      highlightTimers.current = {};
+    };
+  }, []);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-field text-text font-sans body-breath">
+      <FeedbackAura frame={feedbackFrame} />
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="astro-breath absolute left-1/2 top-[-15%] h-[80%] w-[120%] -translate-x-1/2 rounded-full bg-gradient-to-b from-accent/30 via-accent/10 to-transparent blur-3xl opacity-70" />
         <div className="astro-breath absolute inset-x-0 bottom-[-30%] h-1/2 bg-gradient-to-t from-accent/10 via-transparent to-transparent blur-3xl" />
@@ -287,7 +196,14 @@ function App() {
         </section>
         {profileOpen && (
           <aside>
-            <ProfileView profileId={DEFAULT_PROFILE_ID} />
+            <ProfileView
+              profileId={DEFAULT_PROFILE_ID}
+              initialProfile={profile}
+              onProfileUpdate={(updated) => {
+                setProfile(updated);
+                setFeedbackEnabled(updated.feedback_enabled);
+              }}
+            />
           </aside>
         )}
       </main>

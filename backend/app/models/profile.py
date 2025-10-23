@@ -16,6 +16,7 @@ class Profile(BaseModel):
     reflections_count: int
     emotions: Dict[str, int]
     astro_opt_out: bool = False
+    feedback_enabled: bool = True
 
     class Config:
         json_schema_extra = {
@@ -27,6 +28,7 @@ class Profile(BaseModel):
                 "reflections_count": 3,
                 "emotions": {"радость": 5, "свет": 3},
                 "astro_opt_out": False,
+                "feedback_enabled": True,
             }
         }
 

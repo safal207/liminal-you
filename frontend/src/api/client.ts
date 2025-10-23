@@ -29,3 +29,13 @@ export const updateAstroPreference = async (
   });
   return data;
 };
+
+export const updateFeedbackPreference = async (
+  profileId: string,
+  enabled: boolean
+): Promise<Profile> => {
+  const { data } = await api.patch<Profile>(`/profile/${profileId}/settings`, {
+    feedback_enabled: enabled
+  });
+  return data;
+};
