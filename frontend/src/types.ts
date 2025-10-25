@@ -24,3 +24,74 @@ export type Profile = {
   astro_opt_out: boolean;
   feedback_enabled: boolean;
 };
+
+// Auth / Device
+export type LoginResponse = {
+  access_token: string;
+  token_type: string;
+  user_id: string;
+  device_id: string;
+  emotional_seed: number[]; // [P, A, D]
+};
+
+export type DeviceInfo = {
+  device_id: string;
+  user_id: string;
+  interaction_count: number;
+  trust_level: number;
+  emotional_seed: number[];
+  resonance_map?: Record<string, number> | null;
+};
+
+// Emotions
+export type EmotionInfo = {
+  name: string;
+  pad: number[]; // [P, A, D]
+  category: 'positive' | 'negative' | 'neutral';
+};
+
+export type EmotionsResponse = {
+  total: number;
+  emotions: EmotionInfo[];
+  categories: Record<string, number>;
+};
+
+// Analytics
+export type Snapshot = {
+  timestamp: number;
+  pad: number[];
+  entropy: number;
+  coherence: number;
+  samples: number;
+  tone: string;
+};
+
+export type StatisticsResponse = {
+  count: number;
+  avg_entropy: number;
+  avg_coherence: number;
+  avg_pad: number[];
+  tone_distribution: Record<string, number>;
+  time_span_seconds: number;
+};
+
+export type TrendsResponse = {
+  entropy_trend: 'increasing' | 'decreasing' | 'stable';
+  coherence_trend: 'increasing' | 'decreasing' | 'stable';
+  overall_mood: 'positive' | 'negative' | 'neutral';
+  entropy_change: number;
+  coherence_change: number;
+};
+
+export type PeaksValleysResponse = {
+  highest_entropy: Snapshot[];
+  lowest_entropy: Snapshot[];
+  highest_coherence: Snapshot[];
+  lowest_coherence: Snapshot[];
+};
+
+// i18n
+export type TranslationsResponse = {
+  language: string;
+  translations: Record<string, string>;
+};

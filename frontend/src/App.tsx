@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Feed from './components/Feed';
 import ProfileView from './components/ProfileView';
 import FeedbackAura from './components/FeedbackAura';
+import LoginForm from './components/LoginForm';
+import LanguageSelector from './components/LanguageSelector';
+import AnalyticsDashboard from './components/AnalyticsDashboard';
+import DeviceInfo from './components/DeviceInfo';
 import { createReflection, fetchFeed, fetchProfile } from './api/client';
 import { ReflectionPayload, Reflection, Profile } from './types';
 import { useNeuroFeedback } from './hooks/useNeuroFeedback';
@@ -179,6 +183,10 @@ function App() {
           {profileOpen ? 'Закрыть профиль' : 'Профиль'}
         </button>
       </header>
+      <div className="flex items-center justify-end gap-3 px-6 py-3 border-b border-accent/20">
+        <LanguageSelector />
+        <LoginForm onLogin={() => void 0} />
+      </div>
       {overload && (
         <div className="mx-6 mt-4 rounded-xl border border-yellow-400/60 bg-yellow-400/10 p-4 text-sm text-yellow-100">
           Поле дрожит (энтропия {fieldState?.entropy.toFixed(2)}). Темп {submissionsRate.toFixed(1)} отраж./мин — сделаем вдох и замедлимся.
@@ -207,6 +215,13 @@ function App() {
           </aside>
         )}
       </main>
+      <div className="grid gap-4 p-6 md:grid-cols-[2fr_1fr]">
+        <div></div>
+        <div className="space-y-4">
+          <AnalyticsDashboard />
+          <DeviceInfo />
+        </div>
+      </div>
     </div>
   );
 }
