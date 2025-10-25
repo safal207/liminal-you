@@ -12,6 +12,8 @@ from starlette.websockets import WebSocketDisconnect
 
 from .astro import AstroField
 from .services.preferences import get_feedback_enabled
+from .analytics import get_analytics_history
+from .i18n import translate, Language
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +22,20 @@ _FEEDBACK_MESSAGES = {
     "cool": "Поле гармонично, можно делиться.",
     "neutral": "Слушаем поле.",
 }
+
+
+def get_feedback_message(tone: str, language: Language = "ru") -> str:
+    """Get feedback message in specified language.
+
+    Args:
+        tone: Feedback tone (warm, cool, neutral)
+        language: Target language
+
+    Returns:
+        Translated feedback message
+    """
+    key = f"feedback.{tone}"
+    return translate(key, language)
 
 
 def _is_feature_globally_enabled() -> bool:
@@ -119,6 +135,19 @@ class NeuroFeedbackHub:
     async def _handle_state(self, state: Dict[str, Any]) -> None:
         analysis = self.analyze_state(state)
         payload = {"event": "neuro_feedback", "data": analysis}
+
+        # Record snapshot in analytics history
+        try:
+            analytics = get_analytics_history()
+            analytics.add_snapshot(
+                pad=analysis.get("pad", [0.5, 0.35, 0.45]),
+                entropy=analysis.get("entropy", 0.0),
+                coherence=analysis.get("coherence", 0.0),
+                samples=analysis.get("samples", 0),
+                tone=analysis.get("tone", "neutral"),
+            )
+        except Exception as e:
+            logger.error("Failed to record analytics snapshot: %s", e)
 
         now = time.monotonic()
         should_send = False
