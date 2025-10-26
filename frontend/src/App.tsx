@@ -11,6 +11,7 @@ import { createReflection, fetchFeed, fetchProfile } from './api/client';
 import { ReflectionPayload, Reflection, Profile } from './types';
 import { useNeuroFeedback } from './hooks/useNeuroFeedback';
 import { useAstroField, AstroFieldState } from './hooks/useAstroField';
+import MirrorDashboard from './components/MirrorDashboard';
 
 const DEFAULT_PROFILE_ID = 'user-001';
 const HIGHLIGHT_DURATION = 2400;
@@ -284,6 +285,33 @@ function App() {
         </>
       )}
     </div>
+  );
+}
+
+function MirrorPage() {
+  return (
+    <div className="min-h-screen bg-field text-text">
+      <div className="border-b border-accent/40 bg-black/30">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <Link to="/" className="text-sm uppercase tracking-widest text-accent hover:text-accent/80">
+            ← Назад к полю
+          </Link>
+          <h1 className="text-xl font-semibold text-accent">Mirror Loop</h1>
+        </div>
+      </div>
+      <div className="mx-auto max-w-6xl space-y-6 px-6 py-8">
+        <MirrorDashboard />
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<HomeExperience />} />
+      <Route path="/mirror" element={<MirrorPage />} />
+    </Routes>
   );
 }
 

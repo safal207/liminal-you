@@ -60,6 +60,7 @@ def create_app() -> FastAPI:
     app.include_router(emotions_router, prefix="/api", tags=["emotions"])
     app.include_router(feed_router, prefix="/api", tags=["feed"])
     app.include_router(i18n_router, prefix="/api", tags=["i18n"])
+    app.include_router(mirror_router, prefix="/api", tags=["mirror"])
     app.include_router(reflection_router, prefix="/api", tags=["reflections"])
     app.include_router(profile_router, prefix="/api", tags=["profiles"])
     app.include_router(mirror_router, prefix="/api", tags=["mirror"])

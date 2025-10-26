@@ -259,6 +259,9 @@ class NeuroFeedbackHub:
         self._last_state = state
         self._last_analysis = analysis
 
+        if mirror_allowed:
+            await mirror_manager.start_episode(state, action, bucket_key, user_count)
+
     async def _broadcast(self, payload: Dict[str, Any], *, feedback_only: bool) -> None:
         if feedback_only and not _is_feature_globally_enabled():
             logger.debug("feedback loop disabled globally; skipping broadcast")
@@ -298,6 +301,23 @@ class NeuroFeedbackHub:
         if not self._connections:
             return True
         return all(info.is_mirror_enabled() for info in self._connections.values())
+
+    def _connection_count(self) -> int:
+        return len(self._connections)
+
+    def _is_mirror_allowed(self) -> bool:
+        if not self._connections:
+            return True
+        allowed = False
+        for info in self._connections.values():
+            if not info.profile_id:
+                allowed = True
+                continue
+            if get_mirror_enabled(info.profile_id):
+                allowed = True
+            else:
+                logger.debug("Mirror adaptive loop disabled for profile %s", info.profile_id)
+        return allowed
 
 
 feedback_hub = NeuroFeedbackHub()

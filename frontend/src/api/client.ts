@@ -80,6 +80,12 @@ export const updateMirrorPreference = async (profileId: string, enabled: boolean
   return data;
 };
 
+export const updateFeedbackPreference = async (profileId: string, enabled: boolean): Promise<Profile> =>
+  patchProfileSettings(profileId, { feedback_enabled: enabled });
+
+export const updateMirrorPreference = async (profileId: string, enabled: boolean): Promise<Profile> =>
+  patchProfileSettings(profileId, { mirror_enabled: enabled });
+
 // Auth
 export const login = async (userId: string, password?: string): Promise<LoginResponse> => {
   const { data } = await api.post<LoginResponse>('/auth/login', { user_id: userId, password });
