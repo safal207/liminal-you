@@ -17,6 +17,11 @@ export default function FeedbackAura({ frame }: Props) {
       <div className="feedback-aura__glow" style={{ opacity: 0.28 + intensity * 0.55 }} />
       <div className="feedback-aura__message">
         <p className="feedback-aura__text">{message}</p>
+        {frame?.bucket_key && (
+          <p className="mt-1 text-xs uppercase tracking-widest text-accent/70">
+            bucket {frame.bucket_key}{frame.policy_source ? ` · ${frame.policy_source}` : ''}
+          </p>
+        )}
         {frame && (
           <div className="feedback-aura__metrics">
             {PAD_LABELS.map((label, index) => (

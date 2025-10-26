@@ -1,80 +1,66 @@
-"""Utility helpers for mirror loop calculations."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Iterable, List
+from datetime import datetime, timezone
+from typing import Iterable, Sequence
 
 
 @dataclass(slots=True)
-class MirrorState:
-    """Normalized snapshot of astro field metrics."""
-
-    coherence: float
-    entropy: float
-    pad: List[float]
-    ts: int
-
-    @classmethod
-    def from_payload(cls, payload: dict) -> "MirrorState":
-        pad_values = payload.get("pad") or payload.get("pad_avg") or [0.0, 0.0, 0.0]
-        pad = [float(value) for value in list(pad_values)[:3]]
-        if len(pad) < 3:
-            pad.extend([0.0] * (3 - len(pad)))
-
-        return cls(
-            coherence=float(payload.get("coherence", 0.0)),
-            entropy=float(payload.get("entropy", 0.0)),
-            pad=pad,
-            ts=int(payload.get("ts", 0)),
-        )
-
-
-@dataclass(slots=True)
-class MirrorAction:
+class MirrorEpisode:
+    ts: datetime
+    user_count: int
     tone: str
     intensity: float
-    message: str
-
-    @property
-    def intensity_bin(self) -> int:
-        return max(0, min(9, int(self.intensity * 10)))
+    intensity_bin: int
+    reward: float
+    pre_coh: float
+    pre_ent: float
+    post_coh: float
+    post_ent: float
+    pre_pad: Sequence[float]
+    post_pad: Sequence[float]
+    dt_ms: int
+    bucket_key: str
+    id: int | None = None
 
 
 @dataclass(slots=True)
-class EpisodeRecord:
-    pre: MirrorState
-    action: MirrorAction
+class PolicyRecord:
     bucket_key: str
-    user_count: int
-    started_at: float
+    tone: str
+    intensity_bin: int
+    reward_avg: float
+    n: int
+    updated_at: datetime
 
 
-def calculate_reward(pre: MirrorState, post: MirrorState) -> float:
-    """Reward positive changes in coherence and negative entropy drift."""
-
-    delta_coherence = post.coherence - pre.coherence
-    delta_entropy = post.entropy - pre.entropy
-    return round(delta_coherence - delta_entropy, 6)
+def clamp(value: float, min_value: float = 0.0, max_value: float = 1.0) -> float:
+    return max(min_value, min(max_value, value))
 
 
-def derive_bucket_key(now: datetime, load: int, pad: Iterable[float]) -> str:
-    """Compose a coarse context bucket key."""
+def intensity_to_bin(value: float) -> int:
+    return int(round(clamp(value) * 10))
 
-    hour = now.hour
-    if load < 20:
-        load_bin = "L"
-    elif load < 60:
-        load_bin = "M"
-    else:
-        load_bin = "H"
 
-    pad_list = [float(value) for value in list(pad)[:3]]
-    if len(pad_list) < 3:
-        pad_list.extend([0.0] * (3 - len(pad_list)))
+def bin_to_intensity(value: int) -> float:
+    return clamp(value / 10.0)
 
-    labels = ["P", "A", "D"]
-    dominant_index = max(range(3), key=lambda idx: pad_list[idx])
-    dominant = labels[dominant_index]
 
+def compute_reward(pre: dict[str, float], post: dict[str, float]) -> float:
+    return (post["coherence"] - pre["coherence"]) - (post["entropy"] - pre["entropy"])
+
+
+def dominant_pad_letter(pad: Iterable[float]) -> str:
+    values = list(pad)[:3]
+    if not values:
+        return "P"
+    max_index = max(range(len(values)), key=lambda idx: values[idx])
+    return "PAD"[max_index]
+
+
+def build_bucket_key(ts: int, user_count: int, pad: Sequence[float]) -> str:
+    moment = datetime.fromtimestamp(ts, tz=timezone.utc)
+    hour = moment.hour
+    load_bin = "L" if user_count < 20 else "M" if user_count < 60 else "H"
+    dominant = dominant_pad_letter(pad or [0.0, 0.0, 0.0])
     return f"{hour:02d}-{load_bin}-{dominant}"

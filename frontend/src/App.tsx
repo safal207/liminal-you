@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, Route, Routes } from 'react-router-dom';
 import Feed from './components/Feed';
 import ProfileView from './components/ProfileView';
 import FeedbackAura from './components/FeedbackAura';
@@ -7,6 +6,7 @@ import LoginForm from './components/LoginForm';
 import LanguageSelector from './components/LanguageSelector';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import DeviceInfo from './components/DeviceInfo';
+import MirrorDashboard from './components/MirrorDashboard';
 import { createReflection, fetchFeed, fetchProfile } from './api/client';
 import { ReflectionPayload, Reflection, Profile } from './types';
 import { useNeuroFeedback } from './hooks/useNeuroFeedback';
@@ -16,7 +16,12 @@ import MirrorDashboard from './components/MirrorDashboard';
 const DEFAULT_PROFILE_ID = 'user-001';
 const HIGHLIGHT_DURATION = 2400;
 
-function HomeExperience() {
+function App() {
+  const path = typeof window !== 'undefined' ? window.location.pathname : '/';
+  if (path.startsWith('/mirror')) {
+    return <MirrorDashboard />;
+  }
+
   const [feed, setFeed] = useState<Reflection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,8 +32,25 @@ function HomeExperience() {
   const [submissionsRate, setSubmissionsRate] = useState(0);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [feedbackEnabled, setFeedbackEnabled] = useState(true);
+  const [mirrorEnabled, setMirrorEnabled] = useState(true);
+  const [view, setView] = useState<'home' | 'mirror'>(() => {
+    if (typeof window !== 'undefined' && window.location.pathname === '/mirror') {
+      return 'mirror';
+    }
+    return 'home';
+  });
   const highlightTimers = useRef<Record<string, number>>({});
   const astroLastSample = useRef<{ ts: number; samples: number } | null>(null);
+
+  const navigate = useCallback((nextView: 'home' | 'mirror') => {
+    if (typeof window !== 'undefined') {
+      const targetPath = nextView === 'mirror' ? '/mirror' : '/';
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState({ view: nextView }, '', targetPath);
+      }
+    }
+    setView(nextView);
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -54,10 +76,12 @@ function HomeExperience() {
         if (!cancelled) {
           setProfile(data);
           setFeedbackEnabled(data.feedback_enabled);
+          setMirrorEnabled(data.mirror_enabled);
         }
       } catch (err) {
         if (!cancelled) {
           setFeedbackEnabled(true);
+          setMirrorEnabled(true);
         }
       }
     }
@@ -67,6 +91,19 @@ function HomeExperience() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handlePopstate = () => {
+      setView(window.location.pathname === '/mirror' ? 'mirror' : 'home');
+    };
+
+    window.addEventListener('popstate', handlePopstate);
+    return () => window.removeEventListener('popstate', handlePopstate);
   }, []);
 
   const registerHighlight = useCallback((id: string) => {
@@ -97,6 +134,7 @@ function HomeExperience() {
           const data = await fetchProfile(DEFAULT_PROFILE_ID);
           setProfile(data);
           setFeedbackEnabled(data.feedback_enabled);
+          setMirrorEnabled(data.mirror_enabled);
         } catch (err) {
           setError('Профиль не отвечает — попробуем чуть позже.');
           return;
@@ -179,12 +217,12 @@ function HomeExperience() {
       <header className="border-b border-accent/40 p-6 flex justify-between items-center">
         <h1 className="text-2xl font-semibold tracking-wide text-accent">Liminal-You</h1>
         <div className="flex items-center gap-3">
-          <Link
-            to="/mirror"
+          <button
+            onClick={() => navigate(view === 'mirror' ? 'home' : 'mirror')}
             className="rounded-full border border-accent px-4 py-2 text-sm uppercase tracking-widest hover:bg-accent hover:text-bg transition"
           >
-            Mirror
-          </Link>
+            {view === 'mirror' ? 'К ленте' : 'Mirror Loop'}
+          </button>
           <button
             onClick={toggleProfile}
             className="rounded-full border border-accent px-4 py-2 text-sm uppercase tracking-widest hover:bg-accent hover:text-bg transition"
@@ -197,41 +235,55 @@ function HomeExperience() {
         <LanguageSelector />
         <LoginForm onLogin={() => void 0} />
       </div>
-      {overload && (
+      {view === 'home' && overload && (
         <div className="mx-6 mt-4 rounded-xl border border-yellow-400/60 bg-yellow-400/10 p-4 text-sm text-yellow-100">
           Поле перенасыщено (энтропия {fieldState?.entropy.toFixed(2)}). Скорость отражений {submissionsRate.toFixed(1)} в минуту — дай системе вдох.
         </div>
       )}
       {error && <div className="bg-red-500/20 border border-red-500/40 text-red-200 p-4 m-6 rounded">{error}</div>}
-      <main className="grid gap-8 p-6 md:grid-cols-[2fr_1fr]">
-        <section>
-          <Feed
-            reflections={feed}
-            loading={loading}
-            onSubmit={handleSubmit}
-            highlightedIds={highlightedIds}
+      {view === 'mirror' ? (
+        <div className="p-6">
+          <MirrorDashboard
+            frame={feedbackFrame}
+            mirrorEnabled={mirrorEnabled}
+            onBack={() => navigate('home')}
+            onOpenProfile={toggleProfile}
           />
-        </section>
-        {profileOpen && (
-          <aside>
-            <ProfileView
-              profileId={DEFAULT_PROFILE_ID}
-              initialProfile={profile}
-              onProfileUpdate={(updated) => {
-                setProfile(updated);
-                setFeedbackEnabled(updated.feedback_enabled);
-              }}
-            />
-          </aside>
-        )}
-      </main>
-      <div className="grid gap-4 p-6 md:grid-cols-[2fr_1fr]">
-        <div></div>
-        <div className="space-y-4">
-          <AnalyticsDashboard />
-          <DeviceInfo />
         </div>
-      </div>
+      ) : (
+        <>
+          <main className="grid gap-8 p-6 md:grid-cols-[2fr_1fr]">
+            <section>
+              <Feed
+                reflections={feed}
+                loading={loading}
+                onSubmit={handleSubmit}
+                highlightedIds={highlightedIds}
+              />
+            </section>
+            {profileOpen && (
+              <aside>
+                <ProfileView
+                  profileId={DEFAULT_PROFILE_ID}
+                  initialProfile={profile}
+                  onProfileUpdate={(updated) => {
+                    setProfile(updated);
+                    setFeedbackEnabled(updated.feedback_enabled);
+                    setMirrorEnabled(updated.mirror_enabled);
+                  }}
+                />
+              </aside>
+            )}
+          </main>
+          <div className="grid gap-4 p-6 md:grid-cols-[2fr_1fr]">
+            <div></div>
+            <div className="space-y-4">
+              <AnalyticsDashboard />
+              <DeviceInfo />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

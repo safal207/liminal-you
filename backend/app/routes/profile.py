@@ -29,8 +29,6 @@ _SAMPLE_PROFILE_DATA = {
         "свет": 3,
         "спокойствие": 4,
     },
-    "astro_opt_out": False,
-    "feedback_enabled": True,
     "mirror_enabled": True,
 }
 
@@ -98,12 +96,8 @@ def update_profile_settings(
     if profile_id != _SAMPLE_PROFILE_DATA["id"]:
         raise HTTPException(status_code=404, detail="Profile not found")
 
-    if payload.feedback_enabled is None and payload.mirror_enabled is None:
-        raise HTTPException(status_code=400, detail="Нет обновляемых настроек")
-
     if payload.feedback_enabled is not None:
         set_feedback_enabled(profile_id, payload.feedback_enabled)
-
     if payload.mirror_enabled is not None:
         set_mirror_enabled(profile_id, payload.mirror_enabled)
     return _build_profile(profile_id)

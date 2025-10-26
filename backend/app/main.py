@@ -63,6 +63,7 @@ def create_app() -> FastAPI:
     app.include_router(mirror_router, prefix="/api", tags=["mirror"])
     app.include_router(reflection_router, prefix="/api", tags=["reflections"])
     app.include_router(profile_router, prefix="/api", tags=["profiles"])
+    app.include_router(mirror_router, prefix="/api", tags=["mirror"])
     app.include_router(feedback_ws_router, tags=["feedback"])
 
     return app

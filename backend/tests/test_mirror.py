@@ -1,53 +1,65 @@
-import asyncio
-from contextlib import suppress
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
-from app.mirror.manager import MirrorManager
-from app.mirror.storage import MirrorRepository
-from app.mirror.utils import MirrorAction, MirrorState, calculate_reward, derive_bucket_key
+from app.mirror import FieldSnapshot, MirrorLoop, compute_reward
 
 
-def test_calculate_reward_positive_change():
-    pre = MirrorState(coherence=0.4, entropy=0.6, pad=[0.5, 0.3, 0.4], ts=100)
-    post = MirrorState(coherence=0.6, entropy=0.4, pad=[0.5, 0.3, 0.4], ts=110)
-    reward = calculate_reward(pre, post)
-    assert pytest.approx(reward, rel=1e-6) == 0.4
+def test_compute_reward_prefers_coherence_and_low_entropy():
+    pre = FieldSnapshot(coherence=0.4, entropy=0.6, pad=(0.5, 0.3, 0.2), ts=0.0)
+    post = FieldSnapshot(coherence=0.6, entropy=0.4, pad=(0.5, 0.3, 0.2), ts=5.0)
+
+    reward = compute_reward(pre, post)
+
+    assert reward == pytest.approx((0.6 - 0.4) - (0.4 - 0.6))
 
 
-def test_bucket_key_bins_pad():
-    key = derive_bucket_key(datetime(2024, 3, 20, 15, 0, 0), 42, [0.1, 0.7, 0.2])
-    assert key == "15-M-A"
+def test_choose_action_uses_best_known_policy():
+    loop = MirrorLoop(epsilon=0.0, rate_limit=0.0)
 
+    base_time = datetime(2024, 1, 1, 10, 0, 0)
+    pre_state = {
+        "coherence": 0.4,
+        "entropy": 0.6,
+        "pad_avg": [0.8, 0.1, 0.1],
+        "ts": 0.0,
+    }
+    weaker_post = {
+        "coherence": 0.5,
+        "entropy": 0.55,
+        "pad_avg": [0.8, 0.1, 0.1],
+        "ts": 1.0,
+    }
+    stronger_post = {
+        "coherence": 0.65,
+        "entropy": 0.4,
+        "pad_avg": [0.8, 0.1, 0.1],
+        "ts": 2.0,
+    }
 
-@pytest.mark.asyncio
-async def test_policy_learning_cycle(tmp_path):
-    db_url = f"sqlite:///{tmp_path / 'mirror.db'}"
-    repository = MirrorRepository(url=db_url)
-    manager = MirrorManager(repository=repository)
+    event_one = loop.log_event(
+        pre_state=pre_state,
+        action={"tone": "neutral", "intensity": 0.3},
+        post_state=weaker_post,
+        user_count=12,
+        timestamp=base_time,
+    )
+    assert event_one is not None
 
-    state = {"coherence": 0.5, "entropy": 0.6, "pad_avg": [0.2, 0.3, 0.4], "ts": 100}
-    fallback = MirrorAction(tone="neutral", intensity=0.5, message="msg")
+    event_two = loop.log_event(
+        pre_state=pre_state,
+        action={"tone": "warm", "intensity": 0.8},
+        post_state=stronger_post,
+        user_count=12,
+        timestamp=base_time + timedelta(minutes=5),
+    )
+    assert event_two is not None
 
-    action, bucket_key = await manager.choose_action(state, fallback, user_count=10, mirror_allowed=True)
-    assert action.tone == "neutral"
-    assert bucket_key.count("-") == 2
+    tone, intensity = loop.choose_action(
+        bucket_key=event_two.bucket_key,
+        fallback_tone="neutral",
+        fallback_intensity=0.4,
+    )
 
-    await manager.start_episode(state, fallback, bucket_key, user_count=10)
-    post_state = {"coherence": 0.7, "entropy": 0.3, "pad_avg": [0.3, 0.3, 0.4], "ts": 120}
-    await manager.observe_post_state(post_state)
-
-    stats = await repository.stats()
-    assert stats["total_events"] == 1
-
-    await manager.run_learning_cycle()
-    policy = await repository.get_best_policy(bucket_key)
-    assert policy is not None
-    assert policy.tone == "neutral"
-    assert policy.n == 1
-
-    if manager._learner_task:  # cleanup background task
-        manager._learner_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await manager._learner_task
+    assert tone == "warm"
+    assert intensity == pytest.approx(event_two.intensity)

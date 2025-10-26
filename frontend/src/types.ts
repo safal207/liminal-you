@@ -101,29 +101,34 @@ export type TranslationsResponse = {
 export type MirrorPolicyEntry = {
   bucket_key: string;
   tone: string;
-  intensity_bin: number;
+  intensity_bin: 'low' | 'medium' | 'high';
   reward_avg: number;
   n: number;
-  updated_at: string;
+  avg_intensity: number;
+  updated_at: string | null;
+};
+
+export type MirrorPolicyResponse = {
+  bucket_key: string | null;
+  entries: MirrorPolicyEntry[];
 };
 
 export type MirrorEventSummary = {
-  id: number;
-  ts: number;
+  timestamp: string;
   bucket_key: string;
-  tone: string;
-  intensity: number;
   delta_coherence: number;
   delta_entropy: number;
   reward: number;
+  tone: string;
+  intensity: number;
 };
 
-export type MirrorStats = {
-  total_events: number;
+export type MirrorStatsResponse = {
+  count: number;
   avg_reward: number;
-  bucket_coverage: number;
-  unique_buckets: number;
-  recent_events: MirrorEventSummary[];
-  heatmap: { tone: string; intensity_bin: number; reward: number; count: number }[];
-  current_policy?: MirrorPolicyEntry | null;
+  avg_delta_coherence: number;
+  avg_delta_entropy: number;
+  coverage: number;
+  buckets: string[];
+  events: MirrorEventSummary[];
 };

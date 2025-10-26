@@ -12,8 +12,8 @@ import {
   TrendsResponse,
   PeaksValleysResponse,
   TranslationsResponse,
-  MirrorStats,
-  MirrorPolicyEntry,
+  MirrorPolicyResponse,
+  MirrorStatsResponse,
 } from '../types';
 
 const api = axios.create({
@@ -61,13 +61,22 @@ export const updateAstroPreference = async (
   return data;
 };
 
-type ProfileSettingsPayload = {
-  feedback_enabled?: boolean;
-  mirror_enabled?: boolean;
+export const updateFeedbackSettings = async (
+  profileId: string,
+  feedbackEnabled: boolean,
+  mirrorEnabled: boolean
+): Promise<Profile> => {
+  const { data } = await api.patch<Profile>(`/profile/${profileId}/settings`, {
+    feedback_enabled: feedbackEnabled,
+    mirror_enabled: mirrorEnabled
+  });
+  return data;
 };
 
-const patchProfileSettings = async (profileId: string, payload: ProfileSettingsPayload): Promise<Profile> => {
-  const { data } = await api.patch<Profile>(`/profile/${profileId}/settings`, payload);
+export const updateMirrorPreference = async (profileId: string, enabled: boolean): Promise<Profile> => {
+  const { data } = await api.patch<Profile>(`/profile/${profileId}/settings`, {
+    mirror_enabled: enabled
+  });
   return data;
 };
 
@@ -141,25 +150,28 @@ export const translateEmotion = async (emotion: string, language: string): Promi
 };
 
 // Mirror loop
-export const getMirrorStats = async (): Promise<MirrorStats> => {
-  const { data } = await api.get<MirrorStats>('/mirror/stats');
+export const getMirrorPolicy = async (bucketKey?: string): Promise<MirrorPolicyResponse> => {
+  const params = bucketKey ? `?bucket_key=${encodeURIComponent(bucketKey)}` : '';
+  const { data } = await api.get<MirrorPolicyResponse>(`/mirror/policy${params}`);
   return data;
 };
 
-export const listMirrorPolicy = async (bucketKey?: string): Promise<MirrorPolicyEntry[]> => {
-  const url = bucketKey ? `/mirror/policy?bucket_key=${encodeURIComponent(bucketKey)}` : '/mirror/policy';
-  const { data } = await api.get<MirrorPolicyEntry[]>(url);
+export const getMirrorStats = async (
+  range?: { from?: string; to?: string }
+): Promise<MirrorStatsResponse> => {
+  const searchParams = new URLSearchParams();
+  if (range?.from) {
+    searchParams.set('from', range.from);
+  }
+  if (range?.to) {
+    searchParams.set('to', range.to);
+  }
+  const suffix = searchParams.toString();
+  const url = suffix ? `/mirror/stats?${suffix}` : '/mirror/stats';
+  const { data } = await api.get<MirrorStatsResponse>(url);
   return data;
 };
 
-export const triggerMirrorReplay = async (token?: string): Promise<void> => {
-  await api.post(
-    '/mirror/replay',
-    {},
-    token
-      ? {
-          headers: { 'X-Mirror-Token': token }
-        }
-      : undefined
-  );
+export const triggerMirrorReplay = async (): Promise<void> => {
+  await api.post('/mirror/replay');
 };

@@ -76,7 +76,11 @@ export default function ProfileView({ profileId, initialProfile = null, onProfil
   const toggleFeedbackPreference = async () => {
     setUpdatingFeedback(true);
     try {
-      const updated = await updateFeedbackPreference(profile.id, !profile.feedback_enabled);
+      const updated = await updateFeedbackSettings(
+        profile.id,
+        !profile.feedback_enabled,
+        profile.mirror_enabled
+      );
       setProfile(updated);
       onProfileUpdate?.(updated);
     } catch (err) {
@@ -93,7 +97,7 @@ export default function ProfileView({ profileId, initialProfile = null, onProfil
       setProfile(updated);
       onProfileUpdate?.(updated);
     } catch (err) {
-      setError('Не удалось обновить адаптивную петлю.');
+      setError('Не получилось настроить адаптивный резонанс.');
     } finally {
       setUpdatingMirror(false);
     }
@@ -167,8 +171,8 @@ export default function ProfileView({ profileId, initialProfile = null, onProfil
       </div>
       <div className="flex items-center justify-between rounded-lg border border-accent/30 bg-black/20 p-3 text-sm">
         <div>
-          <div className="font-medium text-accent">Adaptive feedback (Mirror)</div>
-          <p className="text-text/60">Самообучающийся контур резонанса</p>
+          <div className="font-medium text-accent">Mirror Loop</div>
+          <p className="text-text/60">Адаптивный резонанс по отпечаткам поля</p>
         </div>
         <button
           onClick={toggleMirrorPreference}
