@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useRef, useState } from 'react';
 import Feed from './components/Feed';
 import ProfileView from './components/ProfileView';
 import FeedbackAura from './components/FeedbackAura';
@@ -34,7 +34,7 @@ function App() {
         const data = await fetchFeed();
         setFeed(data);
       } catch (err) {
-        setError('Не удалось загрузить ленту.');
+        setError('Не удалось загрузить ленту — поле пока молчит.');
       } finally {
         setLoading(false);
       }
@@ -84,7 +84,7 @@ function App() {
     try {
       await createReflection(payload);
     } catch (err) {
-      setError('Не удалось отправить отражение.');
+      setError('Не получилось записать отражение. Попробуй ещё раз.');
     }
   };
 
@@ -96,7 +96,7 @@ function App() {
           setProfile(data);
           setFeedbackEnabled(data.feedback_enabled);
         } catch (err) {
-          setError('Профиль недоступен.');
+          setError('Профиль не отвечает — попробуем чуть позже.');
           return;
         }
       }
@@ -180,7 +180,7 @@ function App() {
           onClick={toggleProfile}
           className="rounded-full border border-accent px-4 py-2 text-sm uppercase tracking-widest hover:bg-accent hover:text-bg transition"
         >
-          {profileOpen ? 'Закрыть профиль' : 'Профиль'}
+          {profileOpen ? 'Скрыть профиль' : 'Открыть профиль'}
         </button>
       </header>
       <div className="flex items-center justify-end gap-3 px-6 py-3 border-b border-accent/20">
@@ -189,7 +189,7 @@ function App() {
       </div>
       {overload && (
         <div className="mx-6 mt-4 rounded-xl border border-yellow-400/60 bg-yellow-400/10 p-4 text-sm text-yellow-100">
-          Поле дрожит (энтропия {fieldState?.entropy.toFixed(2)}). Темп {submissionsRate.toFixed(1)} отраж./мин — сделаем вдох и замедлимся.
+          Поле перенасыщено (энтропия {fieldState?.entropy.toFixed(2)}). Скорость отражений {submissionsRate.toFixed(1)} в минуту — дай системе вдох.
         </div>
       )}
       {error && <div className="bg-red-500/20 border border-red-500/40 text-red-200 p-4 m-6 rounded">{error}</div>}
