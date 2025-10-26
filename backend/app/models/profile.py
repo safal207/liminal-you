@@ -17,6 +17,7 @@ class Profile(BaseModel):
     emotions: Dict[str, int]
     astro_opt_out: bool = False
     feedback_enabled: bool = True
+    mirror_enabled: bool = True
 
     class Config:
         json_schema_extra = {
@@ -29,6 +30,7 @@ class Profile(BaseModel):
                 "emotions": {"радость": 5, "свет": 3},
                 "astro_opt_out": False,
                 "feedback_enabled": True,
+                "mirror_enabled": True,
             }
         }
 

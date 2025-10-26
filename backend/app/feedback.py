@@ -5,15 +5,17 @@ import logging
 import os
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
 
 from .astro import AstroField
-from .services.preferences import get_feedback_enabled
+from .services.preferences import get_feedback_enabled, get_mirror_enabled
 from .analytics import get_analytics_history
 from .i18n import translate, Language
+from .mirror import compute_bucket_key, mirror_loop
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,16 @@ def _is_feature_globally_enabled() -> bool:
 class _ConnectionInfo:
     profile_id: Optional[str]
 
+    def is_feedback_enabled(self) -> bool:
+        if not self.profile_id:
+            return True
+        return get_feedback_enabled(self.profile_id)
+
+    def is_mirror_enabled(self) -> bool:
+        if not self.profile_id:
+            return True
+        return get_mirror_enabled(self.profile_id)
+
 
 class NeuroFeedbackHub:
     """Coordinates the unified neuro-feedback broadcast loop."""
@@ -61,6 +73,8 @@ class NeuroFeedbackHub:
         self._change_threshold = change_threshold
         self._broadcast_task: asyncio.Task[None] | None = None
         self._queue: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue()
+        self._last_state: Dict[str, Any] | None = None
+        self._last_analysis: Dict[str, Any] | None = None
 
     async def connect(self, websocket: WebSocket, profile_id: str | None = None) -> None:
         await websocket.accept()
@@ -93,6 +107,41 @@ class NeuroFeedbackHub:
         return self._astro_field.snapshot()
 
     def analyze_state(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        baseline = self._baseline_analysis(state)
+        analysis = dict(baseline)
+
+        bucket_key = ""
+        strategy = "baseline"
+
+        if self._is_mirror_active():
+            bucket_key = compute_bucket_key(
+                datetime.utcnow(),
+                self._current_user_count(),
+                baseline.get("pad", [0.0, 0.0, 0.0]),
+            )
+            tone, intensity = mirror_loop.choose_action(
+                bucket_key=bucket_key,
+                fallback_tone=baseline["tone"],
+                fallback_intensity=baseline["intensity"],
+            )
+            tone = str(tone)
+            intensity = float(intensity)
+
+            if tone != baseline["tone"] or abs(intensity - baseline["intensity"]) > 1e-6:
+                strategy = "mirror"
+
+            analysis["tone"] = tone
+            analysis["intensity"] = round(max(0.0, min(1.0, intensity)), 3)
+            analysis["message"] = _FEEDBACK_MESSAGES.get(tone, baseline["message"])
+
+        analysis["mirror"] = {
+            "bucket_key": bucket_key,
+            "strategy": strategy,
+        }
+
+        return analysis
+
+    def _baseline_analysis(self, state: Dict[str, Any]) -> Dict[str, Any]:
         entropy = float(state.get("entropy", 0.0))
         coherence = float(state.get("coherence", 0.0))
         pad = state.get("pad_avg", [0.0, 0.0, 0.0])
@@ -136,6 +185,18 @@ class NeuroFeedbackHub:
         analysis = self.analyze_state(state)
         payload = {"event": "neuro_feedback", "data": analysis}
 
+        if self._is_mirror_active():
+            try:
+                mirror_loop.log_event(
+                    pre_state=self._last_state,
+                    action=self._last_analysis,
+                    post_state=state,
+                    user_count=self._current_user_count(),
+                    timestamp=datetime.utcnow(),
+                )
+            except Exception as exc:
+                logger.error("Failed to record mirror event: %s", exc)
+
         # Record snapshot in analytics history
         try:
             analytics = get_analytics_history()
@@ -168,6 +229,8 @@ class NeuroFeedbackHub:
         await self._broadcast(payload, feedback_only=True)
         self._last_payload = payload
         self._last_sent_ts = now
+        self._last_state = state
+        self._last_analysis = analysis
 
     async def _broadcast(self, payload: Dict[str, Any], *, feedback_only: bool) -> None:
         if feedback_only and not _is_feature_globally_enabled():
@@ -199,9 +262,15 @@ class NeuroFeedbackHub:
         info = self._connections.get(websocket)
         if not info:
             return False
-        if info.profile_id:
-            return get_feedback_enabled(info.profile_id)
-        return True
+        return info.is_feedback_enabled()
+
+    def _current_user_count(self) -> int:
+        return len(self._connections)
+
+    def _is_mirror_active(self) -> bool:
+        if not self._connections:
+            return True
+        return all(info.is_mirror_enabled() for info in self._connections.values())
 
 
 feedback_hub = NeuroFeedbackHub()

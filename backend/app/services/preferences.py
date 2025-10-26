@@ -5,6 +5,7 @@ from typing import Dict
 
 _ASTRO_OPT_OUT: Dict[str, bool] = {}
 _FEEDBACK_ENABLED: Dict[str, bool] = {}
+_MIRROR_ENABLED: Dict[str, bool] = {}
 
 
 def get_astro_opt_out(subject: str) -> bool:
@@ -21,3 +22,11 @@ def get_feedback_enabled(subject: str) -> bool:
 
 def set_feedback_enabled(subject: str, value: bool) -> None:
     _FEEDBACK_ENABLED[subject] = value
+
+
+def get_mirror_enabled(subject: str) -> bool:
+    return _MIRROR_ENABLED.get(subject, True)
+
+
+def set_mirror_enabled(subject: str, value: bool) -> None:
+    _MIRROR_ENABLED[subject] = value
