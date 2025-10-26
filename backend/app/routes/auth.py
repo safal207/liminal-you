@@ -1,11 +1,12 @@
 """Authentication routes."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from ..auth import create_access_token, get_device_memory, get_current_user
-from ..auth.jwt import get_current_user as auth_dependency
+
+auth_dependency = Depends(get_current_user)
 
 router = APIRouter()
 

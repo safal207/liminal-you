@@ -1,4 +1,5 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, Route, Routes } from 'react-router-dom';
 import Feed from './components/Feed';
 import ProfileView from './components/ProfileView';
 import FeedbackAura from './components/FeedbackAura';
@@ -10,11 +11,12 @@ import { createReflection, fetchFeed, fetchProfile } from './api/client';
 import { ReflectionPayload, Reflection, Profile } from './types';
 import { useNeuroFeedback } from './hooks/useNeuroFeedback';
 import { useAstroField, AstroFieldState } from './hooks/useAstroField';
+import MirrorDashboard from './components/MirrorDashboard';
 
 const DEFAULT_PROFILE_ID = 'user-001';
 const HIGHLIGHT_DURATION = 2400;
 
-function App() {
+function HomeExperience() {
   const [feed, setFeed] = useState<Reflection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -176,12 +178,20 @@ function App() {
       </div>
       <header className="border-b border-accent/40 p-6 flex justify-between items-center">
         <h1 className="text-2xl font-semibold tracking-wide text-accent">Liminal-You</h1>
-        <button
-          onClick={toggleProfile}
-          className="rounded-full border border-accent px-4 py-2 text-sm uppercase tracking-widest hover:bg-accent hover:text-bg transition"
-        >
-          {profileOpen ? 'Скрыть профиль' : 'Открыть профиль'}
-        </button>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/mirror"
+            className="rounded-full border border-accent px-4 py-2 text-sm uppercase tracking-widest hover:bg-accent hover:text-bg transition"
+          >
+            Mirror
+          </Link>
+          <button
+            onClick={toggleProfile}
+            className="rounded-full border border-accent px-4 py-2 text-sm uppercase tracking-widest hover:bg-accent hover:text-bg transition"
+          >
+            {profileOpen ? 'Скрыть профиль' : 'Открыть профиль'}
+          </button>
+        </div>
       </header>
       <div className="flex items-center justify-end gap-3 px-6 py-3 border-b border-accent/20">
         <LanguageSelector />
@@ -223,6 +233,33 @@ function App() {
         </div>
       </div>
     </div>
+  );
+}
+
+function MirrorPage() {
+  return (
+    <div className="min-h-screen bg-field text-text">
+      <div className="border-b border-accent/40 bg-black/30">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <Link to="/" className="text-sm uppercase tracking-widest text-accent hover:text-accent/80">
+            ← Назад к полю
+          </Link>
+          <h1 className="text-xl font-semibold text-accent">Mirror Loop</h1>
+        </div>
+      </div>
+      <div className="mx-auto max-w-6xl space-y-6 px-6 py-8">
+        <MirrorDashboard />
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<HomeExperience />} />
+      <Route path="/mirror" element={<MirrorPage />} />
+    </Routes>
   );
 }
 

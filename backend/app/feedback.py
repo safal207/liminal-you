@@ -11,9 +11,11 @@ from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
 
 from .astro import AstroField
-from .services.preferences import get_feedback_enabled
+from .services.preferences import get_feedback_enabled, get_mirror_enabled
 from .analytics import get_analytics_history
 from .i18n import translate, Language
+from .mirror import mirror_manager
+from .mirror.utils import MirrorAction
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +135,34 @@ class NeuroFeedbackHub:
                 await self._broadcast(payload, feedback_only=item.get("feedback_only", False))
 
     async def _handle_state(self, state: Dict[str, Any]) -> None:
+        await mirror_manager.observe_post_state(state)
+
         analysis = self.analyze_state(state)
+        fallback_action = MirrorAction(
+            tone=analysis.get("tone", "neutral"),
+            intensity=float(analysis.get("intensity", 0.5)),
+            message=analysis.get("message", _FEEDBACK_MESSAGES.get("neutral", "")),
+        )
+
+        user_count = self._connection_count()
+        mirror_allowed = self._is_mirror_allowed()
+
+        action, bucket_key = await mirror_manager.choose_action(
+            state,
+            fallback_action,
+            user_count=user_count,
+            mirror_allowed=mirror_allowed,
+        )
+
+        analysis.update(
+            {
+                "tone": action.tone,
+                "message": get_feedback_message(action.tone),
+                "intensity": round(float(action.intensity), 3),
+                "bucket_key": bucket_key,
+            }
+        )
+
         payload = {"event": "neuro_feedback", "data": analysis}
 
         # Record snapshot in analytics history
@@ -169,6 +198,9 @@ class NeuroFeedbackHub:
         self._last_payload = payload
         self._last_sent_ts = now
 
+        if mirror_allowed:
+            await mirror_manager.start_episode(state, action, bucket_key, user_count)
+
     async def _broadcast(self, payload: Dict[str, Any], *, feedback_only: bool) -> None:
         if feedback_only and not _is_feature_globally_enabled():
             logger.debug("feedback loop disabled globally; skipping broadcast")
@@ -202,6 +234,23 @@ class NeuroFeedbackHub:
         if info.profile_id:
             return get_feedback_enabled(info.profile_id)
         return True
+
+    def _connection_count(self) -> int:
+        return len(self._connections)
+
+    def _is_mirror_allowed(self) -> bool:
+        if not self._connections:
+            return True
+        allowed = False
+        for info in self._connections.values():
+            if not info.profile_id:
+                allowed = True
+                continue
+            if get_mirror_enabled(info.profile_id):
+                allowed = True
+            else:
+                logger.debug("Mirror adaptive loop disabled for profile %s", info.profile_id)
+        return allowed
 
 
 feedback_hub = NeuroFeedbackHub()

@@ -12,6 +12,8 @@ import {
   TrendsResponse,
   PeaksValleysResponse,
   TranslationsResponse,
+  MirrorStats,
+  MirrorPolicyEntry,
 } from '../types';
 
 const api = axios.create({
@@ -59,15 +61,21 @@ export const updateAstroPreference = async (
   return data;
 };
 
-export const updateFeedbackPreference = async (
-  profileId: string,
-  enabled: boolean
-): Promise<Profile> => {
-  const { data } = await api.patch<Profile>(`/profile/${profileId}/settings`, {
-    feedback_enabled: enabled
-  });
+type ProfileSettingsPayload = {
+  feedback_enabled?: boolean;
+  mirror_enabled?: boolean;
+};
+
+const patchProfileSettings = async (profileId: string, payload: ProfileSettingsPayload): Promise<Profile> => {
+  const { data } = await api.patch<Profile>(`/profile/${profileId}/settings`, payload);
   return data;
 };
+
+export const updateFeedbackPreference = async (profileId: string, enabled: boolean): Promise<Profile> =>
+  patchProfileSettings(profileId, { feedback_enabled: enabled });
+
+export const updateMirrorPreference = async (profileId: string, enabled: boolean): Promise<Profile> =>
+  patchProfileSettings(profileId, { mirror_enabled: enabled });
 
 // Auth
 export const login = async (userId: string, password?: string): Promise<LoginResponse> => {
@@ -130,4 +138,28 @@ export const translateEmotion = async (emotion: string, language: string): Promi
     `/i18n/emotion/${encodeURIComponent(emotion)}?language=${language}`
   );
   return data.translation;
+};
+
+// Mirror loop
+export const getMirrorStats = async (): Promise<MirrorStats> => {
+  const { data } = await api.get<MirrorStats>('/mirror/stats');
+  return data;
+};
+
+export const listMirrorPolicy = async (bucketKey?: string): Promise<MirrorPolicyEntry[]> => {
+  const url = bucketKey ? `/mirror/policy?bucket_key=${encodeURIComponent(bucketKey)}` : '/mirror/policy';
+  const { data } = await api.get<MirrorPolicyEntry[]>(url);
+  return data;
+};
+
+export const triggerMirrorReplay = async (token?: string): Promise<void> => {
+  await api.post(
+    '/mirror/replay',
+    {},
+    token
+      ? {
+          headers: { 'X-Mirror-Token': token }
+        }
+      : undefined
+  );
 };
