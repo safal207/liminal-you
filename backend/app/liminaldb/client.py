@@ -11,6 +11,8 @@ import cbor2
 import websockets
 from websockets.client import WebSocketClientProtocol
 
+from ..config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -60,8 +62,8 @@ class ResonantModel:
 class LiminalDBClient:
     """Async WebSocket client for LiminalDB."""
 
-    def __init__(self, url: str = "ws://localhost:8001"):
-        self.url = url
+    def __init__(self, url: str | None = None):
+        self.url = url or settings.liminaldb_url
         self._ws: WebSocketClientProtocol | None = None
         self._connected = False
         self._lock = asyncio.Lock()
@@ -73,12 +75,14 @@ class LiminalDBClient:
             return
 
         try:
+            logger.info("Attempting to connect to LiminalDB at %s", self.url)
             self._ws = await websockets.connect(self.url)
             self._connected = True
             logger.info("Connected to LiminalDB at %s", self.url)
 
-            # Start event listener
-            asyncio.create_task(self._listen_events())
+            # Note: Event listener disabled for request-response pattern
+            # If needed, implement proper message routing with asyncio.Queue
+            # asyncio.create_task(self._listen_events())
         except Exception as e:
             logger.error("Failed to connect to LiminalDB: %s", e)
             raise

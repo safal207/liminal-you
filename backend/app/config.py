@@ -19,7 +19,7 @@ class Settings(BaseModel):
 
     # LiminalDB
     liminaldb_enabled: bool = os.getenv("LIMINALDB_ENABLED", "true").lower() == "true"
-    liminaldb_url: str = os.getenv("LIMINALDB_URL", "ws://localhost:8001")
+    liminaldb_url: str = os.getenv("LIMINALDB_URL", "ws://localhost:8001/ws")
 
     # Storage backend
     storage_backend: Literal["memory", "postgres", "liminaldb"] = os.getenv(

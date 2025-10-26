@@ -1,9 +1,12 @@
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
+
+logger = logging.getLogger(__name__)
 from .routes.analytics import router as analytics_router
 from .routes.auth import router as auth_router
 from .routes.emotions import router as emotions_router
@@ -26,14 +29,14 @@ async def lifespan(app: FastAPI):
         # Initialize LiminalDB storage
         storage = await get_storage()
         app.state.storage = storage
-        print(f"✨ LiminalDB storage initialized at {settings.liminaldb_url}")
+        logger.info("LiminalDB storage initialized at %s", settings.liminaldb_url)
 
     yield
 
     # Shutdown
     if settings.liminaldb_enabled and hasattr(app.state, "storage"):
         await app.state.storage.close()
-        print("👋 LiminalDB storage closed")
+        logger.info("LiminalDB storage closed")
 
 
 def create_app() -> FastAPI:
