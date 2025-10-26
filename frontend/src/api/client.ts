@@ -12,6 +12,8 @@ import {
   TrendsResponse,
   PeaksValleysResponse,
   TranslationsResponse,
+  MirrorPolicyResponse,
+  MirrorStatsPayload,
 } from '../types';
 
 const api = axios.create({
@@ -59,12 +61,14 @@ export const updateAstroPreference = async (
   return data;
 };
 
-export const updateFeedbackPreference = async (
+export const updateFeedbackSettings = async (
   profileId: string,
-  enabled: boolean
+  feedbackEnabled: boolean,
+  mirrorEnabled: boolean
 ): Promise<Profile> => {
   const { data } = await api.patch<Profile>(`/profile/${profileId}/settings`, {
-    feedback_enabled: enabled
+    feedback_enabled: feedbackEnabled,
+    mirror_enabled: mirrorEnabled
   });
   return data;
 };
@@ -130,4 +134,29 @@ export const translateEmotion = async (emotion: string, language: string): Promi
     `/i18n/emotion/${encodeURIComponent(emotion)}?language=${language}`
   );
   return data.translation;
+};
+
+// Mirror loop
+export const getMirrorStats = async (params?: {
+  from?: string;
+  to?: string;
+  limit?: number;
+}): Promise<MirrorStatsPayload> => {
+  const search = new URLSearchParams();
+  if (params?.from) search.set('from', params.from);
+  if (params?.to) search.set('to', params.to);
+  if (params?.limit) search.set('limit', String(params.limit));
+  const query = search.toString();
+  const { data } = await api.get<MirrorStatsPayload>(`/mirror/stats${query ? `?${query}` : ''}`);
+  return data;
+};
+
+export const getMirrorPolicy = async (bucketKey?: string): Promise<MirrorPolicyResponse> => {
+  const suffix = bucketKey ? `?bucket_key=${encodeURIComponent(bucketKey)}` : '';
+  const { data } = await api.get<MirrorPolicyResponse>(`/mirror/policy${suffix}`);
+  return data;
+};
+
+export const triggerMirrorReplay = async (): Promise<void> => {
+  await api.post('/mirror/replay');
 };

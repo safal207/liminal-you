@@ -11,9 +11,10 @@ from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
 
 from .astro import AstroField
-from .services.preferences import get_feedback_enabled
+from .services.preferences import get_feedback_enabled, get_mirror_enabled
 from .analytics import get_analytics_history
 from .i18n import translate, Language
+from .mirror import get_mirror_loop
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,13 @@ class _ConnectionInfo:
 class NeuroFeedbackHub:
     """Coordinates the unified neuro-feedback broadcast loop."""
 
-    def __init__(self, *, interval: float = 3.0, change_threshold: float = 0.1) -> None:
+    def __init__(
+        self,
+        *,
+        interval: float = 3.0,
+        change_threshold: float = 0.1,
+        mirror_loop=None,
+    ) -> None:
         self._connections: Dict[WebSocket, _ConnectionInfo] = {}
         self._astro_field = AstroField()
         self._lock = asyncio.Lock()
@@ -61,6 +68,7 @@ class NeuroFeedbackHub:
         self._change_threshold = change_threshold
         self._broadcast_task: asyncio.Task[None] | None = None
         self._queue: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue()
+        self._mirror_loop = mirror_loop or get_mirror_loop()
 
     async def connect(self, websocket: WebSocket, profile_id: str | None = None) -> None:
         await websocket.accept()
@@ -92,7 +100,7 @@ class NeuroFeedbackHub:
     async def snapshot(self) -> Dict[str, Any]:
         return self._astro_field.snapshot()
 
-    def analyze_state(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    def _baseline_feedback(self, state: Dict[str, Any]) -> Dict[str, Any]:
         entropy = float(state.get("entropy", 0.0))
         coherence = float(state.get("coherence", 0.0))
         pad = state.get("pad_avg", [0.0, 0.0, 0.0])
@@ -104,12 +112,10 @@ class NeuroFeedbackHub:
         else:
             tone = "neutral"
 
-        message = _FEEDBACK_MESSAGES[tone]
         intensity = max(0.0, min(1.0, (coherence + (1.0 - entropy)) / 2))
 
         return {
             "tone": tone,
-            "message": message,
             "intensity": round(intensity, 3),
             "pad": [float(value) for value in pad[:3]],
             "entropy": round(entropy, 3),
@@ -117,6 +123,28 @@ class NeuroFeedbackHub:
             "ts": int(state.get("ts", time.time())),
             "samples": int(state.get("samples", 0)),
         }
+
+    async def analyze_state(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        fallback = self._baseline_feedback(state)
+        async with self._lock:
+            user_count = len(self._connections)
+            profile_ids = [info.profile_id for info in self._connections.values() if info.profile_id]
+        mirror_active = any(get_mirror_enabled(pid) for pid in profile_ids) if profile_ids else False
+
+        analysis = await self._mirror_loop.choose_action(
+            state,
+            fallback,
+            user_count=user_count,
+            mirror_active=mirror_active,
+        )
+
+        analysis.setdefault("pad", fallback["pad"])
+        analysis.setdefault("entropy", fallback["entropy"])
+        analysis.setdefault("coherence", fallback["coherence"])
+        analysis.setdefault("ts", fallback["ts"])
+        analysis.setdefault("samples", fallback["samples"])
+        analysis["message"] = get_feedback_message(analysis["tone"])
+        return analysis
 
     def _ensure_broadcast_loop(self) -> None:
         if self._broadcast_task is None or self._broadcast_task.done():
@@ -133,7 +161,8 @@ class NeuroFeedbackHub:
                 await self._broadcast(payload, feedback_only=item.get("feedback_only", False))
 
     async def _handle_state(self, state: Dict[str, Any]) -> None:
-        analysis = self.analyze_state(state)
+        await self._mirror_loop.observe_state(state)
+        analysis = await self.analyze_state(state)
         payload = {"event": "neuro_feedback", "data": analysis}
 
         # Record snapshot in analytics history

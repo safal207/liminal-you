@@ -6,8 +6,10 @@ from ..services.auth import get_current_user_optional
 from ..services.preferences import (
     get_astro_opt_out,
     get_feedback_enabled,
+    get_mirror_enabled,
     set_astro_opt_out,
     set_feedback_enabled,
+    set_mirror_enabled,
 )
 
 router = APIRouter()
@@ -40,12 +42,14 @@ def _build_profile(profile_id: str) -> Profile:
             **_SAMPLE_PROFILE_DATA,
             "astro_opt_out": get_astro_opt_out(profile_id),
             "feedback_enabled": get_feedback_enabled(profile_id),
+            "mirror_enabled": get_mirror_enabled(profile_id),
         }
     )
 
 
 class ProfileSettingsPayload(BaseModel):
     feedback_enabled: bool
+    mirror_enabled: bool
 
 
 @router.get("/profile/{profile_id}", response_model=Profile)
@@ -92,4 +96,5 @@ def update_profile_settings(
         raise HTTPException(status_code=404, detail="Profile not found")
 
     set_feedback_enabled(profile_id, payload.feedback_enabled)
+    set_mirror_enabled(profile_id, payload.mirror_enabled)
     return _build_profile(profile_id)

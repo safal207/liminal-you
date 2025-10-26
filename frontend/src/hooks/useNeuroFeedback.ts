@@ -12,6 +12,8 @@ export type NeuroFeedbackFrame = {
   coherence: number;
   ts: number;
   samples: number;
+  bucket_key?: string | null;
+  policy_source?: string | null;
 };
 
 export type FeedbackConnectionState = 'idle' | 'connecting' | 'open' | 'closed';
@@ -31,6 +33,8 @@ interface RawFeedbackPayload {
   coherence?: number;
   ts?: number;
   samples?: number;
+  bucket_key?: string | null;
+  policy_source?: string | null;
 }
 
 const RETRY_DELAY = 4000;
@@ -261,7 +265,10 @@ export function useNeuroFeedback({ profileId, enabled = true, onReflection }: Us
               entropy: Number(candidate.entropy ?? 0),
               coherence: Number(candidate.coherence ?? 0),
               ts: Number(candidate.ts ?? Date.now() / 1000),
-              samples: Number(candidate.samples ?? 0)
+              samples: Number(candidate.samples ?? 0),
+              bucket_key: typeof candidate.bucket_key === 'string' ? candidate.bucket_key : null,
+              policy_source:
+                typeof candidate.policy_source === 'string' ? candidate.policy_source : null
             });
             return;
           }

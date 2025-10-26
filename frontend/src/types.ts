@@ -23,6 +23,7 @@ export type Profile = {
   emotions: Record<string, number>;
   astro_opt_out: boolean;
   feedback_enabled: boolean;
+  mirror_enabled: boolean;
 };
 
 // Auth / Device
@@ -94,4 +95,51 @@ export type PeaksValleysResponse = {
 export type TranslationsResponse = {
   language: string;
   translations: Record<string, string>;
+};
+
+// Mirror loop
+export type MirrorEvent = {
+  id?: number;
+  ts: string;
+  tone: string;
+  intensity: number;
+  reward: number;
+  delta_coherence: number;
+  delta_entropy: number;
+  bucket_key: string;
+  intensity_bin: number;
+  user_count: number;
+  dt_ms: number;
+};
+
+export type MirrorSummary = {
+  total_events: number;
+  avg_reward: number;
+  coverage: number;
+};
+
+export type MirrorStatsPayload = {
+  events: MirrorEvent[];
+  summary: MirrorSummary;
+  current?: {
+    bucket_key?: string | null;
+    policy_source?: string | null;
+    action?: { tone: string; intensity: number } | null;
+  } | null;
+};
+
+export type MirrorPolicyEntry = {
+  bucket_key: string;
+  tone: string;
+  intensity_bin: number;
+  reward_avg: number;
+  n: number;
+  updated_at: string;
+  intensity: number;
+};
+
+export type MirrorPolicyResponse = {
+  bucket_key: string | null;
+  entries: MirrorPolicyEntry[];
+  best: MirrorPolicyEntry | null;
 };

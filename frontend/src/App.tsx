@@ -6,6 +6,7 @@ import LoginForm from './components/LoginForm';
 import LanguageSelector from './components/LanguageSelector';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import DeviceInfo from './components/DeviceInfo';
+import MirrorDashboard from './components/MirrorDashboard';
 import { createReflection, fetchFeed, fetchProfile } from './api/client';
 import { ReflectionPayload, Reflection, Profile } from './types';
 import { useNeuroFeedback } from './hooks/useNeuroFeedback';
@@ -15,6 +16,11 @@ const DEFAULT_PROFILE_ID = 'user-001';
 const HIGHLIGHT_DURATION = 2400;
 
 function App() {
+  const path = typeof window !== 'undefined' ? window.location.pathname : '/';
+  if (path.startsWith('/mirror')) {
+    return <MirrorDashboard />;
+  }
+
   const [feed, setFeed] = useState<Reflection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -1,7 +1,7 @@
 """Authentication routes."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from ..auth import create_access_token, get_device_memory, get_current_user
@@ -89,7 +89,7 @@ async def login(request: Request, payload: LoginRequest) -> LoginResponse:
 
 
 @router.get("/auth/device", response_model=DeviceInfoResponse)
-async def get_device_info(user: dict = auth_dependency) -> DeviceInfoResponse:
+async def get_device_info(user: dict = Depends(auth_dependency)) -> DeviceInfoResponse:
     """Get current device information.
 
     Args:
@@ -145,7 +145,7 @@ async def get_device_memory_stats() -> dict:
 
 
 @router.post("/auth/logout")
-async def logout(user: dict = auth_dependency) -> dict:
+async def logout(user: dict = Depends(auth_dependency)) -> dict:
     """Logout (token blacklisting not implemented in MVP).
 
     Args:

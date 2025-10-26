@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchProfile, updateAstroPreference, updateFeedbackPreference } from '../api/client';
+import { fetchProfile, updateAstroPreference, updateFeedbackSettings } from '../api/client';
 import { Profile } from '../types';
 
 interface Props {
@@ -13,6 +13,7 @@ export default function ProfileView({ profileId, initialProfile = null, onProfil
   const [error, setError] = useState<string | null>(null);
   const [updatingAstro, setUpdatingAstro] = useState(false);
   const [updatingFeedback, setUpdatingFeedback] = useState(false);
+  const [updatingMirror, setUpdatingMirror] = useState(false);
 
   useEffect(() => {
     setProfile(initialProfile);
@@ -70,13 +71,34 @@ export default function ProfileView({ profileId, initialProfile = null, onProfil
   const toggleFeedbackPreference = async () => {
     setUpdatingFeedback(true);
     try {
-      const updated = await updateFeedbackPreference(profile.id, !profile.feedback_enabled);
+      const updated = await updateFeedbackSettings(
+        profile.id,
+        !profile.feedback_enabled,
+        profile.mirror_enabled
+      );
       setProfile(updated);
       onProfileUpdate?.(updated);
     } catch (err) {
       setError('Не удалось обновить контур обратной связи.');
     } finally {
       setUpdatingFeedback(false);
+    }
+  };
+
+  const toggleMirrorPreference = async () => {
+    setUpdatingMirror(true);
+    try {
+      const updated = await updateFeedbackSettings(
+        profile.id,
+        profile.feedback_enabled,
+        !profile.mirror_enabled
+      );
+      setProfile(updated);
+      onProfileUpdate?.(updated);
+    } catch (err) {
+      setError('Не удалось обновить Mirror-политику.');
+    } finally {
+      setUpdatingMirror(false);
     }
   };
 
@@ -142,6 +164,25 @@ export default function ProfileView({ profileId, initialProfile = null, onProfil
           <span
             className={`inline-block h-5 w-5 transform rounded-full bg-accent transition ${
               profile.feedback_enabled ? 'translate-x-5' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
+      <div className="flex items-center justify-between rounded-lg border border-accent/30 bg-black/20 p-3 text-sm">
+        <div>
+          <div className="font-medium text-accent">Adaptive feedback (Mirror)</div>
+          <p className="text-text/60">Самообучающийся резонанс, можно отключить</p>
+        </div>
+        <button
+          onClick={toggleMirrorPreference}
+          disabled={updatingMirror}
+          className={`relative inline-flex h-7 w-12 items-center rounded-full border transition ${
+            profile.mirror_enabled ? 'border-accent bg-accent/40' : 'border-accent/50 bg-black/40'
+          } ${updatingMirror ? 'opacity-60' : 'hover:border-accent'}`}
+        >
+          <span
+            className={`inline-block h-5 w-5 transform rounded-full bg-accent transition ${
+              profile.mirror_enabled ? 'translate-x-5' : 'translate-x-1'
             }`}
           />
         </button>
