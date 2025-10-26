@@ -16,6 +16,11 @@ const DEFAULT_PROFILE_ID = 'user-001';
 const HIGHLIGHT_DURATION = 2400;
 
 function App() {
+  const path = typeof window !== 'undefined' ? window.location.pathname : '/';
+  if (path.startsWith('/mirror')) {
+    return <MirrorDashboard />;
+  }
+
   const [feed, setFeed] = useState<Reflection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

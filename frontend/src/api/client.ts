@@ -61,12 +61,14 @@ export const updateAstroPreference = async (
   return data;
 };
 
-export const updateFeedbackPreference = async (
+export const updateFeedbackSettings = async (
   profileId: string,
-  enabled: boolean
+  feedbackEnabled: boolean,
+  mirrorEnabled: boolean
 ): Promise<Profile> => {
   const { data } = await api.patch<Profile>(`/profile/${profileId}/settings`, {
-    feedback_enabled: enabled
+    feedback_enabled: feedbackEnabled,
+    mirror_enabled: mirrorEnabled
   });
   return data;
 };
