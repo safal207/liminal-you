@@ -12,6 +12,10 @@ export type NeuroFeedbackFrame = {
   coherence: number;
   ts: number;
   samples: number;
+  mirror?: {
+    bucket_key?: string;
+    strategy?: 'baseline' | 'mirror';
+  };
 };
 
 export type FeedbackConnectionState = 'idle' | 'connecting' | 'open' | 'closed';
@@ -31,6 +35,10 @@ interface RawFeedbackPayload {
   coherence?: number;
   ts?: number;
   samples?: number;
+  mirror?: {
+    bucket_key?: string;
+    strategy?: string;
+  };
 }
 
 const RETRY_DELAY = 4000;
@@ -253,6 +261,20 @@ export function useNeuroFeedback({ profileId, enabled = true, onReflection }: Us
                 ? (candidate.tone as FeedbackTone)
                 : 'neutral';
 
+            const mirrorInfo =
+              candidate.mirror && typeof candidate.mirror === 'object'
+                ? {
+                    bucket_key:
+                      typeof candidate.mirror.bucket_key === 'string'
+                        ? candidate.mirror.bucket_key
+                        : undefined,
+                    strategy:
+                      candidate.mirror.strategy === 'mirror' || candidate.mirror.strategy === 'baseline'
+                        ? (candidate.mirror.strategy as 'mirror' | 'baseline')
+                        : undefined
+                  }
+                : undefined;
+
             setFrame({
               tone,
               message: typeof candidate.message === 'string' ? candidate.message : '',
@@ -261,7 +283,8 @@ export function useNeuroFeedback({ profileId, enabled = true, onReflection }: Us
               entropy: Number(candidate.entropy ?? 0),
               coherence: Number(candidate.coherence ?? 0),
               ts: Number(candidate.ts ?? Date.now() / 1000),
-              samples: Number(candidate.samples ?? 0)
+              samples: Number(candidate.samples ?? 0),
+              mirror: mirrorInfo
             });
             return;
           }

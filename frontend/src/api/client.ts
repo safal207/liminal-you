@@ -12,6 +12,8 @@ import {
   TrendsResponse,
   PeaksValleysResponse,
   TranslationsResponse,
+  MirrorPolicyResponse,
+  MirrorStatsResponse,
 } from '../types';
 
 const api = axios.create({
@@ -65,6 +67,13 @@ export const updateFeedbackPreference = async (
 ): Promise<Profile> => {
   const { data } = await api.patch<Profile>(`/profile/${profileId}/settings`, {
     feedback_enabled: enabled
+  });
+  return data;
+};
+
+export const updateMirrorPreference = async (profileId: string, enabled: boolean): Promise<Profile> => {
+  const { data } = await api.patch<Profile>(`/profile/${profileId}/settings`, {
+    mirror_enabled: enabled
   });
   return data;
 };
@@ -130,4 +139,31 @@ export const translateEmotion = async (emotion: string, language: string): Promi
     `/i18n/emotion/${encodeURIComponent(emotion)}?language=${language}`
   );
   return data.translation;
+};
+
+// Mirror loop
+export const getMirrorPolicy = async (bucketKey?: string): Promise<MirrorPolicyResponse> => {
+  const params = bucketKey ? `?bucket_key=${encodeURIComponent(bucketKey)}` : '';
+  const { data } = await api.get<MirrorPolicyResponse>(`/mirror/policy${params}`);
+  return data;
+};
+
+export const getMirrorStats = async (
+  range?: { from?: string; to?: string }
+): Promise<MirrorStatsResponse> => {
+  const searchParams = new URLSearchParams();
+  if (range?.from) {
+    searchParams.set('from', range.from);
+  }
+  if (range?.to) {
+    searchParams.set('to', range.to);
+  }
+  const suffix = searchParams.toString();
+  const url = suffix ? `/mirror/stats?${suffix}` : '/mirror/stats';
+  const { data } = await api.get<MirrorStatsResponse>(url);
+  return data;
+};
+
+export const triggerMirrorReplay = async (): Promise<void> => {
+  await api.post('/mirror/replay');
 };
