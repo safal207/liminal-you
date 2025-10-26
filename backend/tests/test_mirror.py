@@ -1,82 +1,65 @@
-from __future__ import annotations
-
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
 
-from app.mirror.loop import MirrorLoop
-from app.mirror.repository import MirrorRepository
-from app.mirror.utils import MirrorEpisode, build_bucket_key, compute_reward, intensity_to_bin
+from app.mirror import FieldSnapshot, MirrorLoop, compute_reward
 
 
-class _DummyLearner:
-    def ensure_running(self) -> None:  # pragma: no cover - hook for compatibility
-        return
+def test_compute_reward_prefers_coherence_and_low_entropy():
+    pre = FieldSnapshot(coherence=0.4, entropy=0.6, pad=(0.5, 0.3, 0.2), ts=0.0)
+    post = FieldSnapshot(coherence=0.6, entropy=0.4, pad=(0.5, 0.3, 0.2), ts=5.0)
 
-    async def trigger_rebuild(self) -> None:  # pragma: no cover - compatibility
-        return
+    reward = compute_reward(pre, post)
 
-
-def test_compute_reward() -> None:
-    pre = {"coherence": 0.4, "entropy": 0.6}
-    post = {"coherence": 0.7, "entropy": 0.4}
-    assert compute_reward(pre, post) == pytest.approx(0.5)
+    assert reward == pytest.approx((0.6 - 0.4) - (0.4 - 0.6))
 
 
-@pytest.mark.asyncio
-async def test_choose_action_prefers_best_policy() -> None:
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    repository = MirrorRepository(engine)
-    learner = _DummyLearner()
-    loop = MirrorLoop(repository, learner, epsilon=0.0)
+def test_choose_action_uses_best_known_policy():
+    loop = MirrorLoop(epsilon=0.0, rate_limit=0.0)
 
-    bucket_key = "12-M-D"
-    now = datetime.now(timezone.utc)
-    episode = MirrorEpisode(
-        id=None,
-        ts=now,
-        user_count=25,
-        tone="cool",
-        intensity=0.8,
-        intensity_bin=intensity_to_bin(0.8),
-        reward=0.42,
-        pre_coh=0.55,
-        pre_ent=0.48,
-        post_coh=0.75,
-        post_ent=0.35,
-        pre_pad=[0.4, 0.45, 0.9],
-        post_pad=[0.5, 0.5, 0.85],
-        dt_ms=3200,
-        bucket_key=bucket_key,
-    )
-    await repository.insert_event(episode)
-    await repository.rebuild_policy()
-
-    pad = [0.3, 0.35, 0.82]
-    ts_value = int(datetime(2024, 1, 1, 12, tzinfo=timezone.utc).timestamp())
-    fallback = {
-        "tone": "neutral",
-        "message": "",
-        "intensity": 0.45,
-        "pad": pad,
-        "entropy": 0.5,
-        "coherence": 0.6,
-        "ts": ts_value,
-        "samples": 10,
+    base_time = datetime(2024, 1, 1, 10, 0, 0)
+    pre_state = {
+        "coherence": 0.4,
+        "entropy": 0.6,
+        "pad_avg": [0.8, 0.1, 0.1],
+        "ts": 0.0,
     }
-    state = {"entropy": 0.5, "coherence": 0.6, "pad_avg": pad, "ts": ts_value, "samples": 10}
+    weaker_post = {
+        "coherence": 0.5,
+        "entropy": 0.55,
+        "pad_avg": [0.8, 0.1, 0.1],
+        "ts": 1.0,
+    }
+    stronger_post = {
+        "coherence": 0.65,
+        "entropy": 0.4,
+        "pad_avg": [0.8, 0.1, 0.1],
+        "ts": 2.0,
+    }
 
-    bucket = build_bucket_key(ts_value, 25, pad)
-    assert bucket == bucket_key
+    event_one = loop.log_event(
+        pre_state=pre_state,
+        action={"tone": "neutral", "intensity": 0.3},
+        post_state=weaker_post,
+        user_count=12,
+        timestamp=base_time,
+    )
+    assert event_one is not None
 
-    analysis = await loop.choose_action(state, fallback, user_count=25, mirror_active=True)
+    event_two = loop.log_event(
+        pre_state=pre_state,
+        action={"tone": "warm", "intensity": 0.8},
+        post_state=stronger_post,
+        user_count=12,
+        timestamp=base_time + timedelta(minutes=5),
+    )
+    assert event_two is not None
 
-    assert analysis["tone"] == "cool"
-    assert analysis["policy_source"] == "mirror"
-    assert analysis["intensity"] == pytest.approx(0.8, abs=1e-6)
+    tone, intensity = loop.choose_action(
+        bucket_key=event_two.bucket_key,
+        fallback_tone="neutral",
+        fallback_intensity=0.4,
+    )
+
+    assert tone == "warm"
+    assert intensity == pytest.approx(event_two.intensity)

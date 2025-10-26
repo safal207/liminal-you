@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import { fetchProfile, updateAstroPreference, updateFeedbackSettings } from '../api/client';
+import {
+  fetchProfile,
+  updateAstroPreference,
+  updateFeedbackPreference,
+  updateMirrorPreference
+} from '../api/client';
 import { Profile } from '../types';
 
 interface Props {
@@ -88,15 +93,11 @@ export default function ProfileView({ profileId, initialProfile = null, onProfil
   const toggleMirrorPreference = async () => {
     setUpdatingMirror(true);
     try {
-      const updated = await updateFeedbackSettings(
-        profile.id,
-        profile.feedback_enabled,
-        !profile.mirror_enabled
-      );
+      const updated = await updateMirrorPreference(profile.id, !profile.mirror_enabled);
       setProfile(updated);
       onProfileUpdate?.(updated);
     } catch (err) {
-      setError('Не удалось обновить Mirror-политику.');
+      setError('Не получилось настроить адаптивный резонанс.');
     } finally {
       setUpdatingMirror(false);
     }
@@ -170,8 +171,8 @@ export default function ProfileView({ profileId, initialProfile = null, onProfil
       </div>
       <div className="flex items-center justify-between rounded-lg border border-accent/30 bg-black/20 p-3 text-sm">
         <div>
-          <div className="font-medium text-accent">Adaptive feedback (Mirror)</div>
-          <p className="text-text/60">Самообучающийся резонанс, можно отключить</p>
+          <div className="font-medium text-accent">Mirror Loop</div>
+          <p className="text-text/60">Адаптивный резонанс по отпечаткам поля</p>
         </div>
         <button
           onClick={toggleMirrorPreference}

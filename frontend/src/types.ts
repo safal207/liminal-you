@@ -98,48 +98,37 @@ export type TranslationsResponse = {
 };
 
 // Mirror loop
-export type MirrorEvent = {
-  id?: number;
-  ts: string;
-  tone: string;
-  intensity: number;
-  reward: number;
-  delta_coherence: number;
-  delta_entropy: number;
-  bucket_key: string;
-  intensity_bin: number;
-  user_count: number;
-  dt_ms: number;
-};
-
-export type MirrorSummary = {
-  total_events: number;
-  avg_reward: number;
-  coverage: number;
-};
-
-export type MirrorStatsPayload = {
-  events: MirrorEvent[];
-  summary: MirrorSummary;
-  current?: {
-    bucket_key?: string | null;
-    policy_source?: string | null;
-    action?: { tone: string; intensity: number } | null;
-  } | null;
-};
-
 export type MirrorPolicyEntry = {
   bucket_key: string;
   tone: string;
-  intensity_bin: number;
+  intensity_bin: 'low' | 'medium' | 'high';
   reward_avg: number;
   n: number;
-  updated_at: string;
-  intensity: number;
+  avg_intensity: number;
+  updated_at: string | null;
 };
 
 export type MirrorPolicyResponse = {
   bucket_key: string | null;
   entries: MirrorPolicyEntry[];
-  best: MirrorPolicyEntry | null;
+};
+
+export type MirrorEventSummary = {
+  timestamp: string;
+  bucket_key: string;
+  delta_coherence: number;
+  delta_entropy: number;
+  reward: number;
+  tone: string;
+  intensity: number;
+};
+
+export type MirrorStatsResponse = {
+  count: number;
+  avg_reward: number;
+  avg_delta_coherence: number;
+  avg_delta_entropy: number;
+  coverage: number;
+  buckets: string[];
+  events: MirrorEventSummary[];
 };

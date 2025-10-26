@@ -1,208 +1,286 @@
-import { useEffect, useMemo, useState } from 'react';
-import { getMirrorPolicy, getMirrorStats } from '../api/client';
-import { MirrorEvent, MirrorPolicyEntry, MirrorStatsPayload } from '../types';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  getMirrorPolicy,
+  getMirrorStats,
+  triggerMirrorReplay
+} from '../api/client';
+import {
+  MirrorPolicyEntry,
+  MirrorPolicyResponse,
+  MirrorStatsResponse
+} from '../types';
+import { NeuroFeedbackFrame } from '../hooks/useNeuroFeedback';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend
+} from 'recharts';
 
-const toneLabels: Record<string, string> = {
-  warm: 'Тепло',
-  cool: 'Холодок',
-  neutral: 'Нейтраль'
-};
-
-function formatDelta(value: number): string {
-  const rounded = value >= 0 ? `+${value.toFixed(3)}` : value.toFixed(3);
-  return rounded;
+interface MirrorDashboardProps {
+  frame: NeuroFeedbackFrame | null;
+  mirrorEnabled: boolean;
+  onBack: () => void;
+  onOpenProfile: () => void;
 }
 
-function intensityLabel(bin: number): string {
-  return (bin / 10).toFixed(1);
-}
-
-export default function MirrorDashboard() {
-  const [stats, setStats] = useState<MirrorStatsPayload | null>(null);
-  const [policy, setPolicy] = useState<MirrorPolicyEntry[]>([]);
+export default function MirrorDashboard({ frame, mirrorEnabled, onBack, onOpenProfile }: MirrorDashboardProps) {
+  const [policy, setPolicy] = useState<MirrorPolicyResponse | null>(null);
+  const [stats, setStats] = useState<MirrorStatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      try {
-        const [statsPayload, policyPayload] = await Promise.all([
-          getMirrorStats({ limit: 200 }),
-          getMirrorPolicy()
-        ]);
-
-        if (!cancelled) {
-          setStats(statsPayload);
-          setPolicy(policyPayload.entries);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError('Mirror контур пока не отвечает.');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
+  const loadData = useCallback(async () => {
+    setError(null);
+    try {
+      const [policyResponse, statsResponse] = await Promise.all([getMirrorPolicy(), getMirrorStats()]);
+      setPolicy(policyResponse);
+      setStats(statsResponse);
+    } catch (err) {
+      setError('Контур зеркала пока молчит — попробуй обновить позже.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-
-    void load();
-
-    const interval = window.setInterval(load, 15000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
   }, []);
 
-  const heatmap = useMemo(() => {
-    const grouped: Record<string, Record<number, MirrorPolicyEntry>> = {};
-    let maxReward = 0;
-    policy.forEach((entry) => {
-      if (!grouped[entry.tone]) {
-        grouped[entry.tone] = {};
-      }
-      grouped[entry.tone][entry.intensity_bin] = entry;
-      maxReward = Math.max(maxReward, Math.abs(entry.reward_avg));
-    });
-    return { grouped, maxReward: maxReward || 1 };
-  }, [policy]);
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
-  const currentContext = stats?.current;
+  const refresh = async () => {
+    setRefreshing(true);
+    await loadData();
+  };
+
+  const replay = async () => {
+    setRefreshing(true);
+    try {
+      await triggerMirrorReplay();
+    } catch (err) {
+      setError('Не удалось перезапустить обучение — проверь соединение.');
+    }
+    await loadData();
+  };
+
+  const chartData = useMemo(() => {
+    if (!stats?.events.length) {
+      return [];
+    }
+    return stats.events.map((event) => ({
+      ...event,
+      timeLabel: new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }));
+  }, [stats]);
+
+  const heatmapEntries = useMemo(() => policy?.entries ?? [], [policy]);
+
+  const maxPositive = useMemo(
+    () => Math.max(...heatmapEntries.filter((entry) => entry.reward_avg >= 0).map((entry) => entry.reward_avg), 0.0001),
+    [heatmapEntries]
+  );
+  const maxNegative = useMemo(
+    () =>
+      Math.abs(
+        Math.min(...heatmapEntries.filter((entry) => entry.reward_avg < 0).map((entry) => entry.reward_avg), 0)
+      ) || 0.0001,
+    [heatmapEntries]
+  );
+
+  const toneOrder: Array<MirrorPolicyEntry['tone']> = ['warm', 'neutral', 'cool'];
+  const intensityOrder: Array<MirrorPolicyEntry['intensity_bin']> = ['low', 'medium', 'high'];
+
+  const bucketKey = frame?.mirror?.bucket_key ?? '–';
+  const strategyLabel = frame?.mirror?.strategy === 'mirror' ? 'adaptive' : 'baseline';
 
   return (
-    <div className="min-h-screen bg-black text-text">
-      <header className="border-b border-accent/40 bg-black/60 px-8 py-6">
-        <h1 className="text-2xl font-semibold text-accent">Mirror Loop · Resonant Learner</h1>
-        <p className="mt-2 max-w-2xl text-sm text-text/70">
-          Саморефлексия поля: отслеживаем пары «отклик → изменение», учимся подбирать тональность, которая усиливает
-          когерентность и снижает энтропию.
-        </p>
-      </header>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-semibold text-accent">Mirror Loop</h2>
+          <p className="text-sm text-text/70">Самообучающийся контур резонанса</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={onBack}
+            className="rounded-full border border-accent px-4 py-2 text-sm uppercase tracking-widest hover:bg-accent hover:text-bg transition"
+          >
+            Назад
+          </button>
+          <button
+            onClick={onOpenProfile}
+            className="rounded-full border border-accent px-4 py-2 text-sm uppercase tracking-widest hover:bg-accent hover:text-bg transition"
+          >
+            Профиль
+          </button>
+          <button
+            onClick={refresh}
+            disabled={refreshing}
+            className="rounded-full border border-accent px-4 py-2 text-sm uppercase tracking-widest hover:bg-accent hover:text-bg transition disabled:opacity-50"
+          >
+            Обновить
+          </button>
+          <button
+            onClick={replay}
+            disabled={refreshing}
+            className="rounded-full border border-accent px-4 py-2 text-sm uppercase tracking-widest hover:bg-accent hover:text-bg transition disabled:opacity-50"
+          >
+            Переобучить
+          </button>
+        </div>
+      </div>
 
-      <main className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-8">
-        {error && (
-          <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-100">{error}</div>
-        )}
+      {!mirrorEnabled && (
+        <div className="rounded-xl border border-yellow-500/40 bg-yellow-500/10 p-4 text-sm text-yellow-100">
+          Адаптивный контур отключён в профиле — включи Mirror Loop, чтобы резонанс обучался на твоих откликах.
+        </div>
+      )}
 
-        <section className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-xl border border-accent/40 bg-white/5 p-4">
-            <div className="text-xs uppercase tracking-widest text-accent/70">Эпизодов</div>
-            <div className="mt-2 text-3xl font-semibold text-accent">
-              {stats?.summary.total_events ?? (loading ? '…' : 0)}
-            </div>
-            <div className="text-xs text-text/60">за последние 200 шагов</div>
-          </div>
-          <div className="rounded-xl border border-accent/40 bg-white/5 p-4">
-            <div className="text-xs uppercase tracking-widest text-accent/70">Средний reward</div>
-            <div className="mt-2 text-3xl font-semibold text-accent">
-              {stats ? stats.summary.avg_reward.toFixed(3) : loading ? '…' : '0.000'}
-            </div>
-            <div className="text-xs text-text/60">(Δcoh − Δent)</div>
-          </div>
-          <div className="rounded-xl border border-accent/40 bg-white/5 p-4">
-            <div className="text-xs uppercase tracking-widest text-accent/70">Покрытие bucket’ов</div>
-            <div className="mt-2 text-3xl font-semibold text-accent">
-              {stats ? Math.round(stats.summary.coverage * 100) : loading ? '…' : 0}%
-            </div>
-            <div className="text-xs text-text/60">уникальных условий за период</div>
-          </div>
-        </section>
+      {error && <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-100">{error}</div>}
 
-        <section className="rounded-xl border border-accent/40 bg-white/5 p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-accent">Δcoherence / Δentropy</h2>
-            {currentContext?.bucket_key && (
-              <div className="rounded-full border border-accent/50 px-3 py-1 text-xs uppercase tracking-widest text-accent/80">
-                bucket {currentContext.bucket_key}{' '}
-                {currentContext.policy_source ? `· ${currentContext.policy_source}` : ''}
-              </div>
-            )}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="rounded-xl border border-accent/30 bg-white/5 p-4">
+          <div className="text-sm uppercase tracking-widest text-accent/60">Текущий bucket</div>
+          <div className="mt-2 text-2xl font-semibold text-accent">{bucketKey}</div>
+          <div className="mt-2 text-sm text-text/70">
+            Стратегия: <span className="text-accent/80">{strategyLabel}</span>
           </div>
-          <div className="mt-4 space-y-2 text-sm">
-            {(stats?.events ?? []).slice(0, 30).map((event: MirrorEvent) => (
-              <div
-                key={`${event.ts}-${event.tone}-${event.intensity}`}
-                className="grid grid-cols-[120px_minmax(0,1fr)_100px] items-center gap-3 rounded-lg border border-accent/20 bg-black/20 px-3 py-2"
-              >
-                <div className="text-xs uppercase tracking-widest text-accent/70">
-                  {new Date(event.ts).toLocaleTimeString()} · {toneLabels[event.tone] ?? event.tone}
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex-1">
-                    <div className="h-2 w-full rounded-full bg-accent/10">
+          <div className="mt-2 text-sm text-text/70">
+            Последний тон: <span className="text-accent/80">{frame?.tone ?? '—'}</span>
+          </div>
+        </div>
+        <div className="rounded-xl border border-accent/30 bg-white/5 p-4">
+          <div className="text-sm uppercase tracking-widest text-accent/60">Средний reward</div>
+          <div className="mt-2 text-2xl font-semibold text-accent">
+            {stats ? stats.avg_reward.toFixed(3) : '—'}
+          </div>
+          <div className="mt-2 text-sm text-text/70">
+            Δ coherence: <span className="text-accent/80">{stats ? stats.avg_delta_coherence.toFixed(3) : '—'}</span>
+          </div>
+          <div className="mt-1 text-sm text-text/70">
+            Δ entropy: <span className="text-accent/80">{stats ? stats.avg_delta_entropy.toFixed(3) : '—'}</span>
+          </div>
+        </div>
+        <div className="rounded-xl border border-accent/30 bg-white/5 p-4">
+          <div className="text-sm uppercase tracking-widest text-accent/60">Покрытие</div>
+          <div className="mt-2 text-2xl font-semibold text-accent">
+            {stats ? Math.round(stats.coverage * 100) : '—'}%
+          </div>
+          <div className="mt-2 text-sm text-text/70">
+            Bucket'ов в памяти: <span className="text-accent/80">{policy?.entries.length ?? 0}</span>
+          </div>
+          <div className="mt-1 text-sm text-text/70">
+            Всего эпизодов: <span className="text-accent/80">{stats?.count ?? 0}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2 rounded-xl border border-accent/30 bg-white/5 p-4">
+          <div className="mb-4 text-sm uppercase tracking-widest text-accent/60">Δ coherence / Δ entropy</div>
+          {loading ? (
+            <div className="text-sm text-text/60">Загрузка временной ленты...</div>
+          ) : chartData.length ? (
+            <div className="h-64 w-full">
+              <ResponsiveContainer>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="4 4" stroke="rgba(148, 163, 184, 0.2)" />
+                  <XAxis dataKey="timeLabel" stroke="#94a3b8" tickLine={false} />
+                  <YAxis stroke="#94a3b8" tickLine={false} domain={['auto', 'auto']} />
+                  <Tooltip
+                    contentStyle={{ background: '#0f172a', border: '1px solid rgba(148,163,184,0.3)' }}
+                    labelStyle={{ color: '#e2e8f0' }}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="delta_coherence" stroke="#7dd3fc" strokeWidth={2} dot={false} name="Δ coherence" />
+                  <Line type="monotone" dataKey="delta_entropy" stroke="#fda4af" strokeWidth={2} dot={false} name="Δ entropy" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="text-sm text-text/60">Пока нет достаточно событий для графика.</div>
+          )}
+        </div>
+        <div className="rounded-xl border border-accent/30 bg-white/5 p-4">
+          <div className="mb-4 text-sm uppercase tracking-widest text-accent/60">Heatmap эффективности</div>
+          <div className="space-y-2 text-sm">
+            {toneOrder.map((tone) => (
+              <div key={tone}>
+                <div className="mb-2 text-xs uppercase tracking-widest text-accent/70">{tone}</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {intensityOrder.map((intensity) => {
+                    const entry = heatmapEntries.find(
+                      (candidate) => candidate.tone === tone && candidate.intensity_bin === intensity
+                    );
+                    const reward = entry?.reward_avg ?? 0;
+                    const color = reward >= 0
+                      ? `rgba(125, 211, 252, ${0.15 + Math.min(1, reward / maxPositive) * 0.6})`
+                      : `rgba(248, 113, 113, ${0.15 + Math.min(1, Math.abs(reward) / maxNegative) * 0.6})`;
+                    return (
                       <div
-                        className={`h-2 rounded-full ${event.delta_coherence >= 0 ? 'bg-emerald-400/70' : 'bg-red-400/70'}`}
-                        style={{ width: `${Math.min(100, Math.abs(event.delta_coherence) * 200)}%` }}
-                      />
-                    </div>
-                    <div className="mt-1 text-[11px] text-text/60">
-                      Δcoh {formatDelta(event.delta_coherence)} / Δent {formatDelta(event.delta_entropy)}
-                    </div>
-                  </div>
-                  <div className="text-right text-xs text-text/60">
-                    {event.bucket_key}
-                    <div className="text-[10px] text-text/50">{intensityLabel(event.intensity_bin)} · {event.user_count} conn</div>
-                  </div>
+                        key={intensity}
+                        className="rounded-lg border border-accent/30 p-3 text-center"
+                        style={{ background: color }}
+                      >
+                        <div className="text-xs uppercase tracking-widest text-text/80">{intensity}</div>
+                        <div className="text-sm font-semibold text-accent">
+                          {entry ? entry.reward_avg.toFixed(3) : '—'}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="text-right text-xs text-text/60">reward {event.reward.toFixed(3)}</div>
               </div>
             ))}
-            {!loading && (stats?.events.length ?? 0) === 0 && (
-              <div className="rounded-lg border border-accent/20 bg-black/10 p-4 text-center text-sm text-text/60">
-                Пока нет зафиксированных эпизодов — подключи Mirror и подожди пару циклов.
-              </div>
-            )}
           </div>
-        </section>
+        </div>
+      </div>
 
-        <section className="rounded-xl border border-accent/40 bg-white/5 p-6">
-          <h2 className="text-lg font-semibold text-accent">Heatmap эффективности</h2>
-          <p className="mt-1 text-sm text-text/60">Тон × интенсивность (по среднему reward)</p>
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full table-fixed border-separate border-spacing-0 text-sm">
-              <thead>
-                <tr>
-                  <th className="sticky left-0 bg-white/10 px-3 py-2 text-left text-xs uppercase tracking-widest text-accent/70">
-                    Tone
-                  </th>
-                  {Array.from({ length: 11 }).map((_, index) => (
-                    <th key={index} className="px-2 py-2 text-center text-xs text-text/50">
-                      {intensityLabel(index)}
-                    </th>
-                  ))}
+      <div className="rounded-xl border border-accent/30 bg-white/5 p-4">
+        <div className="mb-4 text-sm uppercase tracking-widest text-accent/60">Журнал эпизодов</div>
+        <div className="overflow-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead>
+              <tr className="text-text/60">
+                <th className="px-3 py-2 font-medium">Время</th>
+                <th className="px-3 py-2 font-medium">Bucket</th>
+                <th className="px-3 py-2 font-medium">Тон</th>
+                <th className="px-3 py-2 font-medium">Интенсивность</th>
+                <th className="px-3 py-2 font-medium">Reward</th>
+                <th className="px-3 py-2 font-medium">ΔCoh</th>
+                <th className="px-3 py-2 font-medium">ΔEnt</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats?.events.slice(-50).reverse().map((event) => (
+                <tr key={`${event.timestamp}-${event.bucket_key}`} className="border-t border-accent/20">
+                  <td className="px-3 py-2 text-text/70">
+                    {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </td>
+                  <td className="px-3 py-2 text-text/80">{event.bucket_key}</td>
+                  <td className="px-3 py-2 text-text/80">{event.tone}</td>
+                  <td className="px-3 py-2 text-text/80">{event.intensity.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-accent">{event.reward.toFixed(3)}</td>
+                  <td className="px-3 py-2 text-accent/80">{event.delta_coherence.toFixed(3)}</td>
+                  <td className="px-3 py-2 text-accent/80">{event.delta_entropy.toFixed(3)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {(['warm', 'cool', 'neutral'] as const).map((tone) => (
-                  <tr key={tone}>
-                    <td className="sticky left-0 bg-white/10 px-3 py-2 text-xs uppercase tracking-widest text-accent/70">
-                      {toneLabels[tone] ?? tone}
-                    </td>
-                    {Array.from({ length: 11 }).map((_, index) => {
-                      const entry = heatmap.grouped[tone]?.[index];
-                      const opacity = entry ? Math.min(0.9, Math.abs(entry.reward_avg) / heatmap.maxReward) : 0;
-                      const color = entry && entry.reward_avg >= 0 ? 'bg-emerald-400' : 'bg-red-400';
-                      return (
-                        <td key={index} className="px-2 py-1 text-center text-[11px] text-text/70">
-                          <div
-                            className={`mx-auto h-6 w-6 rounded-full ${entry ? color : 'bg-transparent'}`}
-                            style={{ opacity: entry ? 0.2 + opacity * 0.8 : 0.15 }}
-                          />
-                          {entry ? entry.reward_avg.toFixed(2) : '—'}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </main>
+              ))}
+              {!stats?.events.length && (
+                <tr>
+                  <td colSpan={7} className="px-3 py-4 text-center text-text/60">
+                    Ещё нет данных о переходах.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
