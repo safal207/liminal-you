@@ -1,0 +1,71 @@
+name: E2E Backend + LiminalDB
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/e2e.yml'
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout liminal-you
+        uses: actions/checkout@v4
+
+      - name: Checkout LiminalDB
+        uses: actions/checkout@v4
+        with:
+          repository: safal207/LiminalDB
+          path: liminalbd
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build and run LiminalDB (CLI)
+        working-directory: liminalbd/liminal-db
+        shell: bash
+        run: |
+          cargo build -q -p liminal-cli
+          cargo run -q -p liminal-cli -- --ws-port 8787 --ws-format cbor &
+          for i in {1..30}; do
+            if ss -ltn | grep -q ':8787'; then echo 'LiminalDB is up'; break; fi
+            sleep 1
+          done
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run backend with LiminalDB and smoke calls
+        working-directory: backend
+        env:
+          LIMINALDB_ENABLED: 'true'
+          LIMINALDB_URL: 'ws://127.0.0.1:8787'
+          STORAGE_BACKEND: liminaldb
+        shell: bash
+        run: |
+          uvicorn app.main:app --port 8000 &
+          for i in {1..30}; do
+            sleep 1
+            curl -fsS http://127.0.0.1:8000/docs && break || true
+          done
+          # Create reflection (no auth required in MVP)
+          curl -fsS -X POST http://127.0.0.1:8000/api/reflection \
+            -H 'Content-Type: application/json' \
+            -d '{"from_node":"node-alpha","to_user":"user-001","message":"hello from e2e","emotion":"радость"}'
+          # Check analytics endpoints respond
+          curl -fsS 'http://127.0.0.1:8000/api/analytics/statistics' | head -c 200
+

@@ -1,5 +1,9 @@
 # Liminal-You v0.2
 
+[![Backend Tests](https://github.com/safal207/liminal-you/actions/workflows/backend.yml/badge.svg)](https://github.com/safal207/liminal-you/actions/workflows/backend.yml)
+[![Frontend Tests](https://github.com/safal207/liminal-you/actions/workflows/frontend.yml/badge.svg)](https://github.com/safal207/liminal-you/actions/workflows/frontend.yml)
+[![E2E Backend + LiminalDB](https://github.com/safal207/liminal-you/actions/workflows/e2e.yml/badge.svg)](https://github.com/safal207/liminal-you/actions/workflows/e2e.yml)
+
 > Социальный слой LIMINAL OS — "Ты".
 > Пространство, где внутренние миры встречаются через резонанс.
 
