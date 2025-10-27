@@ -69,13 +69,19 @@ class LiminalDBStorage:
 
     async def add_reflection(self, payload: ReflectionCreate, author: str | None = None) -> Reflection:
         """Store reflection as Write impulse in LiminalDB."""
+        from ..astro import map_label_to_pad
+
         reflection_id = f"refl_{uuid.uuid4().hex[:12]}"
+
+        # Auto-calculate PAD if not provided
+        pad = payload.pad or map_label_to_pad(payload.emotion)
+
         reflection = Reflection(
             id=reflection_id,
             author=author or payload.from_node,
             content=payload.message,
             emotion=payload.emotion,
-            pad=payload.pad,
+            pad=pad,
         )
 
         # Store as impulse in LiminalDB
@@ -93,11 +99,11 @@ class LiminalDBStorage:
         pattern = f"reflection/{payload.emotion}/{author or payload.from_node}/{content_hash}"
 
         try:
-            # Calculate strength from PAD if available
+            # Calculate strength from PAD
             strength = 0.7
-            if payload.pad and len(payload.pad) >= 2:
+            if pad and len(pad) >= 2:
                 # Use pleasure and arousal to calculate strength
-                strength = (payload.pad[0] + payload.pad[1]) / 2
+                strength = (pad[0] + pad[1]) / 2
 
             await self.client.write(
                 pattern=pattern,
