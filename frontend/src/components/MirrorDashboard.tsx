@@ -7,7 +7,9 @@ import {
 import {
   MirrorPolicyEntry,
   MirrorPolicyResponse,
-  MirrorStatsResponse
+  MirrorStatsResponse,
+  CausalSummaryEntry,
+  HintMetric
 } from '../types';
 import { NeuroFeedbackFrame } from '../hooks/useNeuroFeedback';
 import {
@@ -18,7 +20,9 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  Legend
+  Legend,
+  BarChart,
+  Bar
 } from 'recharts';
 
 interface MirrorDashboardProps {
@@ -97,6 +101,37 @@ export default function MirrorDashboard({ frame, mirrorEnabled, onBack, onOpenPr
 
   const bucketKey = frame?.mirror?.bucket_key ?? '–';
   const strategyLabel = frame?.mirror?.strategy === 'mirror' ? 'adaptive' : 'baseline';
+
+  const bucketSummaries = useMemo(() => {
+    const entries = stats?.causal_summary ?? [];
+    if (!entries.length) {
+      return [];
+    }
+
+    const grouped = new Map<string, CausalSummaryEntry[]>();
+    entries.forEach((entry) => {
+      const list = grouped.get(entry.bucket_key) ?? [];
+      list.push(entry);
+      grouped.set(entry.bucket_key, list);
+    });
+
+    return Array.from(grouped.entries()).map(([bucket, values]) => ({
+      bucket,
+      hints: values.sort((a, b) => b.count - a.count)
+    }));
+  }, [stats]);
+
+  const hintMetricsData = useMemo(() => stats?.hint_metrics ?? [], [stats]);
+  const hintChartData = useMemo(
+    () =>
+      hintMetricsData.map((metric) => ({
+        hint: metric.hint,
+        delta_coherence: metric.avg_delta_coherence,
+        delta_entropy: metric.avg_delta_entropy,
+        count: metric.count
+      })),
+    [hintMetricsData]
+  );
 
   return (
     <div className="space-y-6">
@@ -241,6 +276,54 @@ export default function MirrorDashboard({ frame, mirrorEnabled, onBack, onOpenPr
         </div>
       </div>
 
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="rounded-xl border border-accent/30 bg-white/5 p-4">
+          <div className="mb-4 text-sm uppercase tracking-widest text-accent/60">Causal Insights</div>
+          {bucketSummaries.length ? (
+            <div className="space-y-3 text-sm text-text/80">
+              {bucketSummaries.map(({ bucket, hints }) => (
+                <div key={bucket}>
+                  <div className="text-xs uppercase tracking-widest text-accent/70">{bucket}</div>
+                  <ul className="mt-1 space-y-1">
+                    {hints.slice(0, 3).map((hint) => (
+                      <li key={`${bucket}-${hint.hint}`} className="flex items-center justify-between gap-3">
+                        <span className="flex-1">{hint.hint}</span>
+                        <span className="text-accent">×{hint.count}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-text/60">Подсказки пока не собраны.</div>
+          )}
+        </div>
+        <div className="lg:col-span-2 rounded-xl border border-accent/30 bg-white/5 p-4">
+          <div className="mb-4 text-sm uppercase tracking-widest text-accent/60">Влияние подсказок</div>
+          {hintChartData.length ? (
+            <div className="h-64 w-full">
+              <ResponsiveContainer>
+                <BarChart data={hintChartData}>
+                  <CartesianGrid strokeDasharray="4 4" stroke="rgba(148, 163, 184, 0.2)" />
+                  <XAxis dataKey="hint" stroke="#94a3b8" tickLine={false} interval={0} angle={-20} textAnchor="end" />
+                  <YAxis stroke="#94a3b8" tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ background: '#0f172a', border: '1px solid rgba(148,163,184,0.3)' }}
+                    labelStyle={{ color: '#e2e8f0' }}
+                  />
+                  <Legend />
+                  <Bar dataKey="delta_coherence" name="Δ coherence" fill="#7dd3fc" radius={4} />
+                  <Bar dataKey="delta_entropy" name="Δ entropy" fill="#fda4af" radius={4} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="text-sm text-text/60">Недостаточно данных, чтобы построить график влияния.</div>
+          )}
+        </div>
+      </div>
+
       <div className="rounded-xl border border-accent/30 bg-white/5 p-4">
         <div className="mb-4 text-sm uppercase tracking-widest text-accent/60">Журнал эпизодов</div>
         <div className="overflow-auto">
@@ -254,6 +337,7 @@ export default function MirrorDashboard({ frame, mirrorEnabled, onBack, onOpenPr
                 <th className="px-3 py-2 font-medium">Reward</th>
                 <th className="px-3 py-2 font-medium">ΔCoh</th>
                 <th className="px-3 py-2 font-medium">ΔEnt</th>
+                <th className="px-3 py-2 font-medium">Причина</th>
               </tr>
             </thead>
             <tbody>
@@ -268,6 +352,7 @@ export default function MirrorDashboard({ frame, mirrorEnabled, onBack, onOpenPr
                   <td className="px-3 py-2 text-accent">{event.reward.toFixed(3)}</td>
                   <td className="px-3 py-2 text-accent/80">{event.delta_coherence.toFixed(3)}</td>
                   <td className="px-3 py-2 text-accent/80">{event.delta_entropy.toFixed(3)}</td>
+                  <td className="px-3 py-2 text-text/70">{event.cause_text ?? '—'}</td>
                 </tr>
               ))}
               {!stats?.events.length && (

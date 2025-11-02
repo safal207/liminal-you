@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 import time
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Iterable, List, MutableMapping, Optional, Sequence, Tuple
@@ -50,6 +51,7 @@ class MirrorEvent:
     dt_ms: float
     bucket_key: str
     reward: float
+    cause_text: str | None = None
 
 
 @dataclass
@@ -134,6 +136,14 @@ class MirrorLoop:
 
         tone = str(action.get("tone", "neutral"))
         intensity = float(action.get("intensity", 0.5))
+        cause_candidate = action.get("hint") if isinstance(action, MutableMapping) else None
+        cause_text = str(cause_candidate) if isinstance(cause_candidate, str) and cause_candidate else None
+        if not cause_text and isinstance(action, MutableMapping):
+            hint_meta = action.get("hint_meta")
+            if isinstance(hint_meta, MutableMapping):
+                raw = hint_meta.get("cause")
+                if isinstance(raw, str) and raw:
+                    cause_text = raw
         ts = timestamp or datetime.utcnow()
         dt_ms = max(0.0, (post_snapshot.ts - pre_snapshot.ts) * 1000.0)
         bucket_key = compute_bucket_key(ts, user_count, pre_snapshot.pad)
@@ -154,6 +164,7 @@ class MirrorLoop:
             dt_ms=dt_ms,
             bucket_key=bucket_key,
             reward=reward,
+            cause_text=cause_text,
         )
         self._events.append(event)
         self._last_logged_at[bucket_key] = now_sec
@@ -241,13 +252,57 @@ class MirrorLoop:
                 "coverage": 0.0,
                 "buckets": [],
                 "events": [],
+                "causal_summary": [],
+                "hint_metrics": [],
             }
 
         count = len(events)
         avg_reward = sum(event.reward for event in events) / count
-        avg_delta_coherence = sum(event.post.coherence - event.pre.coherence for event in events) / count
-        avg_delta_entropy = sum(event.post.entropy - event.pre.entropy for event in events) / count
+        deltas = [
+            (event.post.coherence - event.pre.coherence, event.post.entropy - event.pre.entropy)
+            for event in events
+        ]
+        avg_delta_coherence = sum(delta[0] for delta in deltas) / count
+        avg_delta_entropy = sum(delta[1] for delta in deltas) / count
         buckets = sorted({event.bucket_key for event in events})
+
+        bucket_hint_counts: dict[str, Counter[str]] = defaultdict(Counter)
+        hint_accumulator: dict[str, dict[str, float]] = {}
+
+        for event, (delta_coh, delta_ent) in zip(events, deltas):
+            if not event.cause_text:
+                continue
+            bucket_hint_counts[event.bucket_key][event.cause_text] += 1
+            metrics = hint_accumulator.setdefault(
+                event.cause_text,
+                {"delta_coh": 0.0, "delta_ent": 0.0, "count": 0.0},
+            )
+            metrics["delta_coh"] += delta_coh
+            metrics["delta_ent"] += delta_ent
+            metrics["count"] += 1
+
+        causal_summary = []
+        for bucket, counter in bucket_hint_counts.items():
+            for hint, hint_count in counter.most_common(3):
+                causal_summary.append(
+                    {"bucket_key": bucket, "hint": hint, "count": int(hint_count)}
+                )
+
+        hint_metrics = []
+        for hint, metrics in hint_accumulator.items():
+            count_metric = metrics["count"]
+            if count_metric <= 0:
+                continue
+            hint_metrics.append(
+                {
+                    "hint": hint,
+                    "avg_delta_coherence": metrics["delta_coh"] / count_metric,
+                    "avg_delta_entropy": metrics["delta_ent"] / count_metric,
+                    "count": int(count_metric),
+                }
+            )
+
+        hint_metrics.sort(key=lambda item: item["count"], reverse=True)
 
         return {
             "count": count,
@@ -265,9 +320,12 @@ class MirrorLoop:
                     "reward": event.reward,
                     "tone": event.tone,
                     "intensity": event.intensity,
+                    "cause_text": event.cause_text,
                 }
                 for event in events
             ],
+            "causal_summary": causal_summary,
+            "hint_metrics": hint_metrics,
         }
 
 

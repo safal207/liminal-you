@@ -121,6 +121,7 @@ class AnalyticsHistory:
                 "avg_coherence": 0.0,
                 "avg_pad": [0.5, 0.35, 0.45],
                 "tone_distribution": {},
+                "time_span_seconds": 0.0,
             }
 
         # Calculate averages

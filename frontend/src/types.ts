@@ -121,6 +121,20 @@ export type MirrorEventSummary = {
   reward: number;
   tone: string;
   intensity: number;
+  cause_text?: string | null;
+};
+
+export type CausalSummaryEntry = {
+  bucket_key: string;
+  hint: string;
+  count: number;
+};
+
+export type HintMetric = {
+  hint: string;
+  avg_delta_coherence: number;
+  avg_delta_entropy: number;
+  count: number;
 };
 
 export type MirrorStatsResponse = {
@@ -131,4 +145,6 @@ export type MirrorStatsResponse = {
   coverage: number;
   buckets: string[];
   events: MirrorEventSummary[];
+  causal_summary: CausalSummaryEntry[];
+  hint_metrics: HintMetric[];
 };

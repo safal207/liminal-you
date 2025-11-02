@@ -22,6 +22,7 @@ class MirrorEpisode:
     dt_ms: int
     bucket_key: str
     id: int | None = None
+    cause_text: str | None = None
 
 
 @dataclass(slots=True)

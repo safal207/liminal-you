@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Feed from './components/Feed';
 import ProfileView from './components/ProfileView';
 import FeedbackAura from './components/FeedbackAura';
+import CausalHintToast from './components/CausalHintToast';
 import LoginForm from './components/LoginForm';
 import LanguageSelector from './components/LanguageSelector';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
@@ -9,9 +10,8 @@ import DeviceInfo from './components/DeviceInfo';
 import MirrorDashboard from './components/MirrorDashboard';
 import { createReflection, fetchFeed, fetchProfile } from './api/client';
 import { ReflectionPayload, Reflection, Profile } from './types';
-import { useNeuroFeedback } from './hooks/useNeuroFeedback';
+import { useNeuroFeedback, CausalHint } from './hooks/useNeuroFeedback';
 import { useAstroField, AstroFieldState } from './hooks/useAstroField';
-import MirrorDashboard from './components/MirrorDashboard';
 
 const DEFAULT_PROFILE_ID = 'user-001';
 const HIGHLIGHT_DURATION = 2400;
@@ -185,7 +185,27 @@ function App() {
     onReflection: handleReflectionEvent
   });
 
+  const [hintVisible, setHintVisible] = useState(false);
+  const [currentHint, setCurrentHint] = useState<CausalHint | null>(null);
+  const hintKeyRef = useRef<string | null>(null);
+
   useAstroField(feedbackFrame, handleFieldUpdate);
+
+  useEffect(() => {
+    const hint = feedbackFrame?.hint;
+    if (!hint) {
+      return;
+    }
+
+    const key = `${hint.message}-${hint.sourceBucket ?? ''}`;
+    if (hintKeyRef.current === key) {
+      return;
+    }
+
+    hintKeyRef.current = key;
+    setCurrentHint(hint);
+    setHintVisible(true);
+  }, [feedbackFrame?.hint]);
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -210,6 +230,15 @@ function App() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-field text-text font-sans body-breath">
       <FeedbackAura frame={feedbackFrame} />
+      {currentHint && (
+        <div className="pointer-events-none fixed right-6 top-24 z-50">
+          <CausalHintToast
+            hint={currentHint}
+            visible={hintVisible}
+            onClose={() => setHintVisible(false)}
+          />
+        </div>
+      )}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="astro-breath absolute left-1/2 top-[-15%] h-[80%] w-[120%] -translate-x-1/2 rounded-full bg-gradient-to-b from-accent/30 via-accent/10 to-transparent blur-3xl opacity-70" />
         <div className="astro-breath absolute inset-x-0 bottom-[-30%] h-1/2 bg-gradient-to-t from-accent/10 via-transparent to-transparent blur-3xl" />
