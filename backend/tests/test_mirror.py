@@ -54,6 +54,7 @@ def test_choose_action_uses_best_known_policy():
         timestamp=base_time + timedelta(minutes=5),
     )
     assert event_two is not None
+    assert event_two.cause_text is None
 
     tone, intensity = loop.choose_action(
         bucket_key=event_two.bucket_key,

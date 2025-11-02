@@ -3,6 +3,12 @@ import { Reflection } from '../types';
 
 export type FeedbackTone = 'warm' | 'cool' | 'neutral';
 
+export type CausalHint = {
+  message: string;
+  trend?: string;
+  sourceBucket?: string;
+};
+
 export type NeuroFeedbackFrame = {
   tone: FeedbackTone;
   message: string;
@@ -16,6 +22,7 @@ export type NeuroFeedbackFrame = {
     bucket_key?: string;
     strategy?: 'baseline' | 'mirror';
   };
+  hint?: CausalHint;
 };
 
 export type FeedbackConnectionState = 'idle' | 'connecting' | 'open' | 'closed';
@@ -38,6 +45,12 @@ interface RawFeedbackPayload {
   mirror?: {
     bucket_key?: string;
     strategy?: string;
+  };
+  hint?: string;
+  hint_meta?: {
+    cause?: string;
+    trend?: string;
+    source_bucket?: string;
   };
 }
 
@@ -275,6 +288,45 @@ export function useNeuroFeedback({ profileId, enabled = true, onReflection }: Us
                   }
                 : undefined;
 
+            const bucketKey =
+              mirrorInfo?.bucket_key ??
+              (typeof candidate.mirror === 'object' && candidate.mirror && 'bucket_key' in candidate.mirror
+                ? (candidate.mirror.bucket_key as string | undefined)
+                : undefined);
+
+            let hint: CausalHint | undefined;
+            const rawHint = typeof candidate.hint === 'string' ? candidate.hint.trim() : '';
+            const hintMeta =
+              candidate.hint_meta && typeof candidate.hint_meta === 'object'
+                ? {
+                    cause:
+                      typeof candidate.hint_meta.cause === 'string'
+                        ? candidate.hint_meta.cause.trim()
+                        : undefined,
+                    trend:
+                      typeof candidate.hint_meta.trend === 'string'
+                        ? candidate.hint_meta.trend
+                        : undefined,
+                    sourceBucket:
+                      typeof candidate.hint_meta.source_bucket === 'string'
+                        ? candidate.hint_meta.source_bucket
+                        : undefined
+                  }
+                : undefined;
+
+            if (hintMeta?.cause) {
+              hint = {
+                message: hintMeta.cause,
+                trend: hintMeta.trend,
+                sourceBucket: hintMeta.sourceBucket ?? bucketKey
+              };
+            } else if (rawHint) {
+              hint = {
+                message: rawHint,
+                sourceBucket: bucketKey
+              };
+            }
+
             setFrame({
               tone,
               message: typeof candidate.message === 'string' ? candidate.message : '',
@@ -284,7 +336,8 @@ export function useNeuroFeedback({ profileId, enabled = true, onReflection }: Us
               coherence: Number(candidate.coherence ?? 0),
               ts: Number(candidate.ts ?? Date.now() / 1000),
               samples: Number(candidate.samples ?? 0),
-              mirror: mirrorInfo
+              mirror: mirrorInfo,
+              hint
             });
             return;
           }

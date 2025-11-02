@@ -47,6 +47,20 @@ class MirrorEventModel(BaseModel):
     reward: float
     tone: str
     intensity: float
+    cause_text: str | None = None
+
+
+class CausalSummaryModel(BaseModel):
+    bucket_key: str
+    hint: str
+    count: int
+
+
+class HintMetricModel(BaseModel):
+    hint: str
+    avg_delta_coherence: float
+    avg_delta_entropy: float
+    count: int
 
 
 class MirrorStatsResponse(BaseModel):
@@ -57,6 +71,8 @@ class MirrorStatsResponse(BaseModel):
     coverage: float
     buckets: List[str]
     events: List[MirrorEventModel]
+    causal_summary: List[CausalSummaryModel]
+    hint_metrics: List[HintMetricModel]
 
 
 @router.get("/mirror/policy", response_model=MirrorPolicyResponse)
@@ -78,6 +94,8 @@ def get_mirror_stats(
     end = _parse_iso(to_ts)
     stats = mirror_loop.get_stats(start=start, end=end)
     events = [MirrorEventModel(**event) for event in stats["events"]]
+    causal_summary = [CausalSummaryModel(**entry) for entry in stats.get("causal_summary", [])]
+    hint_metrics = [HintMetricModel(**entry) for entry in stats.get("hint_metrics", [])]
     return MirrorStatsResponse(
         count=stats["count"],
         avg_reward=stats["avg_reward"],
@@ -86,6 +104,8 @@ def get_mirror_stats(
         coverage=stats["coverage"],
         buckets=list(stats["buckets"]),
         events=events,
+        causal_summary=causal_summary,
+        hint_metrics=hint_metrics,
     )
 
 

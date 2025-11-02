@@ -7,7 +7,7 @@ from typing import List, Sequence
 
 from sqlalchemy import Engine, func, select
 
-from .tables import metadata, mirror_events, policy_table
+from .tables import metadata, mirror_events, policy_table, causal_summary
 from .utils import MirrorEpisode, PolicyRecord
 
 
@@ -47,11 +47,33 @@ class MirrorRepository:
             "post_pad": list(episode.post_pad),
             "dt_ms": episode.dt_ms,
             "bucket_key": episode.bucket_key,
+            "cause_text": episode.cause_text,
         }
         if not self._available:
             return
         with self._engine.begin() as connection:
             connection.execute(mirror_events.insert().values(**payload))
+            if episode.cause_text:
+                existing = connection.execute(
+                    select(causal_summary.c.count)
+                    .where(causal_summary.c.bucket_key == episode.bucket_key)
+                    .where(causal_summary.c.hint == episode.cause_text)
+                ).scalar()
+                if existing is None:
+                    connection.execute(
+                        causal_summary.insert().values(
+                            bucket_key=episode.bucket_key,
+                            hint=episode.cause_text,
+                            count=1,
+                        )
+                    )
+                else:
+                    connection.execute(
+                        causal_summary.update()
+                        .where(causal_summary.c.bucket_key == episode.bucket_key)
+                        .where(causal_summary.c.hint == episode.cause_text)
+                        .values(count=int(existing) + 1)
+                    )
 
     async def rebuild_policy(self) -> None:
         if not self._available:

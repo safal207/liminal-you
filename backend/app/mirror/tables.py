@@ -12,6 +12,7 @@ from sqlalchemy import (
     MetaData,
     String,
     Table,
+    Text,
 )
 
 metadata = MetaData()
@@ -34,6 +35,7 @@ mirror_events = Table(
     Column("post_pad", JSON, nullable=False),
     Column("dt_ms", Integer, nullable=False),
     Column("bucket_key", String(32), nullable=False),
+    Column("cause_text", Text, nullable=True),
 )
 
 policy_table = Table(
@@ -45,6 +47,14 @@ policy_table = Table(
     Column("reward_avg", Float, nullable=False),
     Column("n", Integer, nullable=False),
     Column("updated_at", DateTime(timezone=True), default=datetime.utcnow, nullable=False),
+)
+
+causal_summary = Table(
+    "causal_summary",
+    metadata,
+    Column("bucket_key", String(32), primary_key=True),
+    Column("hint", Text, primary_key=True),
+    Column("count", Integer, nullable=False, default=0),
 )
 
 Index("idx_mirror_ts", mirror_events.c.ts)
