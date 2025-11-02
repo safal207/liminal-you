@@ -16,29 +16,6 @@ jobs:
       - name: Checkout liminal-you
         uses: actions/checkout@v4
 
-      - name: Checkout LiminalDB
-        uses: actions/checkout@v4
-        with:
-          repository: safal207/LiminalDB
-          path: liminalbd
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-
-      - name: Build and run LiminalDB (CLI)
-        working-directory: liminalbd/liminal-db
-        shell: bash
-        run: |
-          cargo build -q -p liminal-cli
-          cargo run -q -p liminal-cli -- --ws-port 8787 --ws-format cbor &
-          for i in {1..30}; do
-            if ss -ltn | grep -q ':8787'; then echo 'LiminalDB is up'; break; fi
-            sleep 1
-          done
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -49,11 +26,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
+      - name: Start mock LiminalDB
+        shell: bash
+        run: |
+          python tools/mock_liminaldb.py &
+          LIMINALDB_PID=$!
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:8001/health && break || sleep 1
+          done
+          echo "MOCK_LIMINALDB_PID=$LIMINALDB_PID" >> "$GITHUB_ENV"
+          echo "Mock LiminalDB is ready"
+
       - name: Run backend with LiminalDB and smoke calls
         working-directory: backend
         env:
           LIMINALDB_ENABLED: 'true'
-          LIMINALDB_URL: 'ws://127.0.0.1:8787'
+          LIMINALDB_URL: 'ws://127.0.0.1:8001/ws'
           STORAGE_BACKEND: liminaldb
         shell: bash
         run: |
