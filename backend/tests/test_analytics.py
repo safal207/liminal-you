@@ -28,3 +28,14 @@ def test_analytics_endpoints():
     peaks = client.get('/api/analytics/peaks?count=2')
     assert peaks.status_code == 200
 
+
+def test_statistics_empty_history_returns_zero_span():
+    history = get_analytics_history()
+    history._snapshots.clear()  # ensure empty state for test isolation
+
+    stats = client.get('/api/analytics/statistics')
+
+    assert stats.status_code == 200
+    body = stats.json()
+    assert body['count'] == 0
+    assert body['time_span_seconds'] == 0.0
