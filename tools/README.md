@@ -8,9 +8,12 @@ Mock WebSocket server that emulates LiminalDB protocol for testing backend integ
 
 - ✅ CBOR protocol support
 - ✅ JSON fallback support
-- ✅ Impulse processing (Query/Write/Affect)
-- ✅ ResonantModel storage (awaken.set/get)
-- ✅ Harmony events generation
+- ✅ **Impulse processing** (Query/Write/Affect with pattern indexing)
+- ✅ **ResonantModel storage** (awaken.set/get with edge and trait merging)
+- ✅ **Introspect command** (model introspection with related impulses)
+- ✅ **Harmony events** generation (entropy/coherence calculation)
+- ✅ **Pattern indexing** for Query operations
+- ✅ **Affect impulse** updates astro field models
 - ✅ Metrics tracking
 - ✅ Health check endpoint
 - ✅ Stats endpoint with recent activity
@@ -27,9 +30,11 @@ python mock_liminaldb.py
 ```
 
 The server will start on:
-- **WebSocket**: `ws://localhost:8001/ws`
-- **Health**: `http://localhost:8001/health`
-- **Stats**: `http://localhost:8001/stats`
+- **WebSocket**: `ws://localhost:8787/ws` (default, configurable via PORT env)
+- **Health**: `http://localhost:8787/health`
+- **Stats**: `http://localhost:8787/stats`
+
+**Note**: Default port changed to 8787 to match LiminalDB default port.
 
 ### Testing Integration
 
@@ -43,16 +48,27 @@ python mock_liminaldb.py
 
 You should see:
 ```
-╔════════════════════════════════════════════════════════════╗
-║  Mock LiminalDB WebSocket Server                          ║
-║  Version: 0.1.0                                            ║
-║  Protocol: CBOR + JSON                                     ║
-╚════════════════════════════════════════════════════════════╝
+============================================================
+  Mock LiminalDB WebSocket Server
+  Version: 0.2.0
+  Protocol: CBOR + JSON
+============================================================
 
-🚀 Starting mock server...
-📡 WebSocket endpoint: ws://localhost:8001/ws
-🏥 Health check: http://localhost:8001/health
-📊 Stats: http://localhost:8001/stats
+Supported Commands:
+  - awaken.set    : Store/update ResonantModel
+  - awaken.get    : Retrieve ResonantModel
+  - introspect    : Introspect model state
+  - metrics       : Get cluster metrics
+
+Supported Impulses:
+  - Query         : Search for matching patterns
+  - Write         : Store data as impulse
+  - Affect        : Modify model state
+
+Starting mock server...
+WebSocket endpoint: ws://localhost:8787/ws
+Health check: http://localhost:8787/health
+Stats: http://localhost:8787/stats
 
 Waiting for connections...
 ```
@@ -62,7 +78,7 @@ Waiting for connections...
 ```bash
 # backend/.env
 LIMINALDB_ENABLED=true
-LIMINALDB_URL=ws://localhost:8001/ws
+LIMINALDB_URL=ws://localhost:8787/ws
 STORAGE_BACKEND=liminaldb
 ```
 
@@ -77,13 +93,14 @@ uvicorn app.main:app --reload --port 8000
 
 You should see in backend logs:
 ```
-✨ LiminalDB storage initialized at ws://localhost:8001/ws
+✨ LiminalDB storage initialized at ws://localhost:8787/ws
 ```
 
 And in mock server logs:
 ```
 🔗 WebSocket connected: client_1234567890
-💾 Model stored: astro/global | persistence=snapshot
+💾 Model stored: astro/global | persistence=snapshot | edges=0
+📨 Impulse received: Write | pattern='reflection/радость/...' | strength=0.73
 ```
 
 #### 4. Test API
@@ -110,7 +127,10 @@ curl -X POST http://localhost:8000/api/reflection \
 curl http://localhost:8000/api/analytics/statistics
 
 # 4. Check mock server stats
-curl http://localhost:8001/stats
+curl http://localhost:8787/stats
+
+# 5. Introspect a model
+# (via WebSocket - see examples below)
 ```
 
 ### Expected Mock Server Logs
@@ -197,8 +217,106 @@ Accepts CBOR or JSON messages:
   "persistence": "snapshot",
   "latent_traits": {"created_at": 1699123456.789},
   "tags": ["user", "test"],
+  "edges": [],
   "status": "active",
   "last_updated": 1699123456.789
+}
+```
+
+**introspect (Introspect Model):**
+```json
+{
+  "cmd": "introspect",
+  "args": {
+    "id": "astro/global"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "model_id": "astro/global",
+  "event": "introspect",
+  "data": {
+    "ev": "introspect",
+    "id": "astro/global",
+    "meta": {
+      "status": "active",
+      "persistence": "snapshot",
+      "edges_count": 0,
+      "related_impulses_count": 5,
+      "traits": {
+        "pad_p": 0.5,
+        "pad_a": 0.35,
+        "pad_d": 0.45,
+        "entropy": 0.0,
+        "coherence": 1.0
+      },
+      "timestamp": 1699123456
+    }
+  }
+}
+```
+
+**Query Impulse:**
+```json
+{
+  "kind": "Query",
+  "pattern": "reflection/радость",
+  "strength": 0.7,
+  "tags": ["reflection"]
+}
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "impulse_id": "imp_5",
+  "kind": "Query",
+  "matches": 3,
+  "event": "harmony",
+  "data": {
+    "ev": "harmony",
+    "meta": {
+      "strength": 0.7,
+      "entropy": 0.3,
+      "coherence": 0.7,
+      "status": "balanced"
+    }
+  }
+}
+```
+
+**Affect Impulse:**
+```json
+{
+  "kind": "Affect",
+  "pattern": "astro/global/update",
+  "strength": 0.8,
+  "tags": ["astro", "field", "update"]
+}
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "impulse_id": "imp_6",
+  "kind": "Affect",
+  "pattern": "astro/global/update",
+  "event": "harmony",
+  "data": {
+    "ev": "harmony",
+    "meta": {
+      "strength": 0.8,
+      "entropy": 0.2,
+      "coherence": 0.8,
+      "status": "OK"
+    }
+  }
 }
 ```
 
@@ -207,7 +325,7 @@ Accepts CBOR or JSON messages:
 Health check endpoint:
 
 ```bash
-curl http://localhost:8001/health
+curl http://localhost:8787/health
 ```
 
 Response:
@@ -215,8 +333,10 @@ Response:
 {
   "status": "ok",
   "service": "mock-liminaldb",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "uptime_seconds": 123,
+  "supported_commands": ["awaken.set", "awaken.get", "introspect", "metrics"],
+  "supported_impulses": ["Query", "Write", "Affect"],
   "stats": {
     "cells": 5,
     "sleeping_pct": 0.0,
@@ -261,7 +381,7 @@ Response:
 **Backend не подключается:**
 ```bash
 # Check if mock server is running
-curl http://localhost:8001/health
+curl http://localhost:8787/health
 
 # Check backend .env
 cat backend/.env | grep LIMINALDB
@@ -276,13 +396,13 @@ pip list | grep cbor2
 
 **Port already in use:**
 ```bash
-# Kill process on port 8001
+# Kill process on port 8787
 # Windows:
-netstat -ano | findstr :8001
+netstat -ano | findstr :8787
 taskkill /PID <PID> /F
 
-# Or change port in mock_liminaldb.py:
-web.run_app(app, host='localhost', port=8002)
+# Or change port via environment variable:
+PORT=8001 python mock_liminaldb.py
 ```
 
 ### Development
@@ -295,8 +415,9 @@ The mock server is intentionally simple and stores everything in memory. It's de
 
 It does NOT:
 - ❌ Persist data to disk
-- ❌ Implement full LiminalDB logic (cells, evolution, etc.)
-- ❌ Support all LiminalDB commands
+- ❌ Implement full LiminalDB logic (cells, evolution, resonance loop, etc.)
+- ❌ Support all LiminalDB commands (missing: cluster commands, advanced queries)
+- ❌ Emit real-time events to clients (only responds to requests)
 
 For production testing, use real LiminalDB.
 

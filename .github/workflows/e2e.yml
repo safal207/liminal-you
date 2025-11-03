@@ -5,9 +5,14 @@ on:
     branches: [ main ]
     paths:
       - 'backend/**'
+      - 'tools/mock_liminaldb.py'
       - '.github/workflows/e2e.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'tools/mock_liminaldb.py'
+      - '.github/workflows/e2e.yml'
 
 jobs:
   e2e:
@@ -26,22 +31,27 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
+      - name: Install mock server dependencies
+        run: |
+          pip install -r tools/requirements.txt
+
       - name: Start mock LiminalDB
         shell: bash
         run: |
           python tools/mock_liminaldb.py &
           LIMINALDB_PID=$!
-          for i in {1..30}; do
-            curl -fsS http://127.0.0.1:8001/health && break || sleep 1
-          done
           echo "MOCK_LIMINALDB_PID=$LIMINALDB_PID" >> "$GITHUB_ENV"
-          echo "Mock LiminalDB is ready"
+          # Wait for server to be ready (default port is 8787)
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:8787/health && break || sleep 1
+          done
+          echo "Mock LiminalDB is ready on port 8787"
 
       - name: Run backend with LiminalDB and smoke calls
         working-directory: backend
         env:
           LIMINALDB_ENABLED: 'true'
-          LIMINALDB_URL: 'ws://127.0.0.1:8001/ws'
+          LIMINALDB_URL: 'ws://127.0.0.1:8787/ws'
           STORAGE_BACKEND: liminaldb
         shell: bash
         run: |
@@ -56,4 +66,12 @@ jobs:
             -d '{"from_node":"node-alpha","to_user":"user-001","message":"hello from e2e","emotion":"радость"}'
           # Check analytics endpoints respond
           curl -fsS 'http://127.0.0.1:8000/api/analytics/statistics' | head -c 200
+
+      - name: Stop mock LiminalDB server
+        if: always()
+        shell: bash
+        run: |
+          if [ ! -z "$MOCK_LIMINALDB_PID" ]; then
+            kill $MOCK_LIMINALDB_PID || true
+          fi
 
