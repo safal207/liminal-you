@@ -16,6 +16,7 @@ from .routes.reflection import router as reflection_router
 from .routes.profile import router as profile_router
 from .routes.feedback_ws import router as feedback_ws_router
 from .routes.mirror import router as mirror_router
+from .routes.witness import router as witness_router
 
 # Import LiminalDB storage if enabled
 if settings.liminaldb_enabled:
@@ -43,7 +44,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Liminal-You API",
-        version="0.2.0",
+        version="0.3.0-dev",
         lifespan=lifespan,
     )
 
@@ -63,7 +64,7 @@ def create_app() -> FastAPI:
     app.include_router(mirror_router, prefix="/api", tags=["mirror"])
     app.include_router(reflection_router, prefix="/api", tags=["reflections"])
     app.include_router(profile_router, prefix="/api", tags=["profiles"])
-    app.include_router(mirror_router, prefix="/api", tags=["mirror"])
+    app.include_router(witness_router, tags=["witness"])
     app.include_router(feedback_ws_router, tags=["feedback"])
 
     return app
