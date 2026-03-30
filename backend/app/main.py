@@ -17,6 +17,7 @@ from .routes.profile import router as profile_router
 from .routes.feedback_ws import router as feedback_ws_router
 from .routes.mirror import router as mirror_router
 from .routes.witness import router as witness_router
+from .routes.product_metrics import router as product_metrics_router
 
 # Import LiminalDB storage if enabled
 if settings.liminaldb_enabled:
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(reflection_router, prefix="/api", tags=["reflections"])
     app.include_router(profile_router, prefix="/api", tags=["profiles"])
     app.include_router(witness_router, tags=["witness"])
+    app.include_router(product_metrics_router, tags=["product"])
     app.include_router(feedback_ws_router, tags=["feedback"])
 
     return app

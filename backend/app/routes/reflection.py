@@ -10,6 +10,7 @@ from ..feedback import feedback_hub
 from ..services.preferences import get_astro_opt_out
 from ..astro import map_label_to_pad
 from ..witness import WitnessTracker
+from ..product import get_product_metrics_tracker
 
 router = APIRouter()
 
@@ -49,6 +50,8 @@ async def create_reflection(
     await feedback_hub.publish({"event": "new_reflection", "data": reflection.model_dump()})
 
     author = reflection.author
+    product_tracker = get_product_metrics_tracker()
+    product_tracker.track_reflection(author)
     now = time.time()
     rate_limited = now - _LAST_INTEGRATION.get(author, 0.0) < _RATE_LIMIT_SECONDS
     opted_out = get_astro_opt_out(author)
@@ -79,6 +82,13 @@ async def create_reflection(
                     "message": _get_witness_message(witness_snapshot.state.value),
                 }
             })
+
+            # Track North Star progress (WWS candidate)
+            product_tracker.track_state_change(
+                user_id=author,
+                coherence=state.get("coherence", 0.0),
+                entropy=state.get("entropy", 1.0),
+            )
         except Exception as e:
             # Don't fail reflection creation if witness tracking fails
             import logging
