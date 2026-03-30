@@ -76,11 +76,7 @@ export default function ProfileView({ profileId, initialProfile = null, onProfil
   const toggleFeedbackPreference = async () => {
     setUpdatingFeedback(true);
     try {
-      const updated = await updateFeedbackSettings(
-        profile.id,
-        !profile.feedback_enabled,
-        profile.mirror_enabled
-      );
+      const updated = await updateFeedbackPreference(profile.id, !profile.feedback_enabled);
       setProfile(updated);
       onProfileUpdate?.(updated);
     } catch (err) {

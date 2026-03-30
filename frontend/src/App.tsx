@@ -8,20 +8,16 @@ import LanguageSelector from './components/LanguageSelector';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import DeviceInfo from './components/DeviceInfo';
 import MirrorDashboard from './components/MirrorDashboard';
-import { createReflection, fetchFeed, fetchProfile } from './api/client';
+import { createReflection, fetchFeed, fetchProfile, markPracticeCompleted } from './api/client';
 import { ReflectionPayload, Reflection, Profile } from './types';
 import { useNeuroFeedback, CausalHint } from './hooks/useNeuroFeedback';
 import { useAstroField, AstroFieldState } from './hooks/useAstroField';
 
 const DEFAULT_PROFILE_ID = 'user-001';
 const HIGHLIGHT_DURATION = 2400;
+const PRACTICE_DURATION_SECONDS = 60;
 
 function App() {
-  const path = typeof window !== 'undefined' ? window.location.pathname : '/';
-  if (path.startsWith('/mirror')) {
-    return <MirrorDashboard />;
-  }
-
   const [feed, setFeed] = useState<Reflection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +35,11 @@ function App() {
     }
     return 'home';
   });
+
+  const [practiceActive, setPracticeActive] = useState(false);
+  const [practiceSeconds, setPracticeSeconds] = useState(PRACTICE_DURATION_SECONDS);
+  const [practiceDone, setPracticeDone] = useState(false);
+
   const highlightTimers = useRef<Record<string, number>>({});
   const astroLastSample = useRef<{ ts: number; samples: number } | null>(null);
 
@@ -106,6 +107,26 @@ function App() {
     return () => window.removeEventListener('popstate', handlePopstate);
   }, []);
 
+  useEffect(() => {
+    if (!practiceActive) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setPracticeSeconds((prev) => {
+        if (prev <= 1) {
+          window.clearInterval(timer);
+          setPracticeActive(false);
+          setPracticeDone(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [practiceActive]);
+
   const registerHighlight = useCallback((id: string) => {
     setHighlightedIds((prev) => (prev.includes(id) ? prev : [id, ...prev]));
 
@@ -124,6 +145,21 @@ function App() {
       await createReflection(payload);
     } catch (err) {
       setError('Не получилось записать отражение. Попробуй ещё раз.');
+    }
+  };
+
+  const handlePracticeStart = () => {
+    setPracticeDone(false);
+    setPracticeSeconds(PRACTICE_DURATION_SECONDS);
+    setPracticeActive(true);
+  };
+
+  const handlePracticeComplete = async () => {
+    try {
+      await markPracticeCompleted(DEFAULT_PROFILE_ID);
+      setPracticeDone(true);
+    } catch (err) {
+      setError('Практика завершена локально, но не удалось сохранить метрику.');
     }
   };
 
@@ -265,8 +301,28 @@ function App() {
         <LoginForm onLogin={() => void 0} />
       </div>
       {view === 'home' && overload && (
-        <div className="mx-6 mt-4 rounded-xl border border-yellow-400/60 bg-yellow-400/10 p-4 text-sm text-yellow-100">
-          Поле перенасыщено (энтропия {fieldState?.entropy.toFixed(2)}). Скорость отражений {submissionsRate.toFixed(1)} в минуту — дай системе вдох.
+        <div className="mx-6 mt-4 rounded-xl border border-yellow-400/60 bg-yellow-400/10 p-4 text-sm text-yellow-100 space-y-3">
+          <p>
+            Поле перенасыщено (энтропия {fieldState?.entropy.toFixed(2)}). Скорость отражений {submissionsRate.toFixed(1)} в минуту — дай системе вдох.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handlePracticeStart}
+              disabled={practiceActive}
+              className="rounded-full border border-yellow-200/70 px-4 py-1.5 text-xs uppercase tracking-widest hover:bg-yellow-200/20 disabled:opacity-50"
+            >
+              {practiceActive ? 'Практика идёт…' : 'Сделать практику (60с)'}
+            </button>
+            {practiceActive && <span>Осталось: {practiceSeconds}с</span>}
+            {practiceDone && (
+              <button
+                onClick={handlePracticeComplete}
+                className="rounded-full border border-emerald-200/70 px-4 py-1.5 text-xs uppercase tracking-widest hover:bg-emerald-200/20"
+              >
+                Зафиксировать завершение
+              </button>
+            )}
+          </div>
         </div>
       )}
       {error && <div className="bg-red-500/20 border border-red-500/40 text-red-200 p-4 m-6 rounded">{error}</div>}
@@ -314,33 +370,6 @@ function App() {
         </>
       )}
     </div>
-  );
-}
-
-function MirrorPage() {
-  return (
-    <div className="min-h-screen bg-field text-text">
-      <div className="border-b border-accent/40 bg-black/30">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Link to="/" className="text-sm uppercase tracking-widest text-accent hover:text-accent/80">
-            ← Назад к полю
-          </Link>
-          <h1 className="text-xl font-semibold text-accent">Mirror Loop</h1>
-        </div>
-      </div>
-      <div className="mx-auto max-w-6xl space-y-6 px-6 py-8">
-        <MirrorDashboard />
-      </div>
-    </div>
-  );
-}
-
-function App() {
-  return (
-    <Routes>
-      <Route path="/" element={<HomeExperience />} />
-      <Route path="/mirror" element={<MirrorPage />} />
-    </Routes>
   );
 }
 
