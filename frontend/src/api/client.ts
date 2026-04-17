@@ -61,30 +61,35 @@ export const updateAstroPreference = async (
   return data;
 };
 
+const patchProfileSettings = async (
+  profileId: string,
+  patch: { feedback_enabled?: boolean; mirror_enabled?: boolean }
+): Promise<Profile> => {
+  const { data } = await api.patch<Profile>(`/profile/${profileId}/settings`, patch);
+  return data;
+};
+
 export const updateFeedbackSettings = async (
   profileId: string,
   feedbackEnabled: boolean,
   mirrorEnabled: boolean
-): Promise<Profile> => {
-  const { data } = await api.patch<Profile>(`/profile/${profileId}/settings`, {
-    feedback_enabled: feedbackEnabled,
-    mirror_enabled: mirrorEnabled
-  });
-  return data;
-};
-
-export const updateMirrorPreference = async (profileId: string, enabled: boolean): Promise<Profile> => {
-  const { data } = await api.patch<Profile>(`/profile/${profileId}/settings`, {
-    mirror_enabled: enabled
-  });
-  return data;
-};
+): Promise<Profile> => patchProfileSettings(profileId, {
+  feedback_enabled: feedbackEnabled,
+  mirror_enabled: mirrorEnabled,
+});
 
 export const updateFeedbackPreference = async (profileId: string, enabled: boolean): Promise<Profile> =>
   patchProfileSettings(profileId, { feedback_enabled: enabled });
 
 export const updateMirrorPreference = async (profileId: string, enabled: boolean): Promise<Profile> =>
   patchProfileSettings(profileId, { mirror_enabled: enabled });
+
+export const markPracticeCompleted = async (userId: string): Promise<{ user_id: string; wws_completed: boolean }> => {
+  const { data } = await api.post<{ user_id: string; wws_completed: boolean }>('/product/practice-completed', {
+    user_id: userId,
+  });
+  return data;
+};
 
 // Auth
 export const login = async (userId: string, password?: string): Promise<LoginResponse> => {
